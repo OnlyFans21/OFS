@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="description" content="OnlyFans Clone - Creator subscription platform">
+<title>OnlyFans</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="supabase.js"></script>
+<script src="app.js" defer></script>
+</head>
+<body>
+
+<!-- ===================== PRELOADER ===================== -->
+<div id="preloader"><div class="preloader-inner"><i class="fas fa-lock"></i><div>OnlyFans</div><span>Loading...</span></div></div>
+
+<!-- ===================== TOAST CONTAINER ===================== -->
+<div id="toastContainer"></div>
+
+<!-- ============================================================================
+     VIEW: LANDING PAGE
+============================================================================ -->
+<div class="view active" id="view-landing">
+    <nav class="navbar">
+        <a class="nav-logo" onclick="App.go('feed')">
+            <i class="fas fa-lock breathe" onclick="event.stopPropagation();App.showOwnerLogin()" style="cursor:pointer" title="Owner Dashboard"></i>
+            OnlyFans
+        </a>
+        <div class="nav-right">
+            <button class="nav-btn" onclick="App.showAuth('login')"><i class="fas fa-sign-in-alt"></i> Log In</button>
+            <button class="nav-btn nav-btn-primary" onclick="App.showAuth('signup')"><i class="fas fa-user-plus"></i> Sign Up</button>
+            <button class="theme-toggle" onclick="App.toggleTheme()"><i class="fas fa-moon" id="themeIcon"></i></button>
+        </div>
+    </nav>
+    <div class="landing-hero">
+        <h1>Make Money Doing What You Love</h1>
+        <p>Connect with your fans, share exclusive content, and earn monthly income from your creativity.</p>
+        <button class="btn btn-lg" style="background:#fff;color:var(--primary);margin:6px" onclick="App.showAuth('signup')">Get Started</button>
+        <button class="btn btn-lg btn-outline" style="border-color:#fff;color:#fff" onclick="App.go('feed')">Explore Creators</button>
+    </div>
+    <div class="landing-features">
+        <h2>Why Creators Choose OnlyFans</h2>
+        <p>Everything you need to grow your audience and maximize earnings</p>
+        <div class="feature-grid">
+            <div class="feature-card">
+                <i class="fas fa-dollar-sign"></i>
+                <h3>Monthly Income</h3>
+                <p>Set your own subscription price and earn recurring revenue from loyal fans.</p>
+            </div>
+            <div class="feature-card">
+                <i class="fas fa-shield-alt"></i>
+                <h3>Secure Payments</h3>
+                <p>Accept Bitcoin, USDT, Gift Cards with instant notifications.</p>
+            </div>
+            <div class="feature-card">
+                <i class="fas fa-comments"></i>
+                <h3>Direct Messaging</h3>
+                <p>Build real connections with fans through private messages.</p>
+            </div>
+            <div class="feature-card">
+                <i class="fas fa-chart-line"></i>
+                <h3>Creator Analytics</h3>
+                <p>Track earnings, subscriber growth, and content performance.</p>
+            </div>
+        </div>
+    </div>
+    <div class="landing-footer">
+        <p>OnlyFans Platform. All rights reserved.</p>
+    </div>
+</div>
+
+<!-- ============================================================================
+     VIEW: HOME FEED
+============================================================================ -->
+<div class="view" id="view-feed">
+    <nav class="navbar">
+        <div style="display:flex;align-items:center;gap:8px">
+            <a class="nav-logo" onclick="App.go('landing')"><i class="fas fa-lock breathe"></i> OnlyFans</a>
+        </div>
+        <div class="nav-right">
+            <button class="theme-toggle" onclick="App.toggleTheme()"><i class="fas fa-moon" id="themeIconFeed"></i></button>
+            <div id="feedNavRight"></div>
+        </div>
+    </nav>
+    <div class="stories-row" id="feedStories"></div>
+    <div class="p-4">
+        <div class="search-bar">
+            <i class="fas fa-search"></i>
+            <input type="text" id="creatorSearch" placeholder="Search creators..." oninput="App.searchCreators(this.value)">
+        </div>
+        <h2 style="font-size:20px;font-weight:700;margin-bottom:16px">Discover Creators</h2>
+        <div class="creator-grid" id="feedCreatorsGrid"></div>
+        <h2 style="font-size:20px;font-weight:700;margin:24px 0 16px">Recent Posts</h2>
+        <div class="posts-grid" id="feedPostsGrid"></div>
+    </div>
+</div>
+
+<!-- ============================================================================
+     VIEW: CREATOR PROFILE
+============================================================================ -->
+<div class="view" id="view-creator-profile">
+    <nav class="navbar">
+        <div style="display:flex;align-items:center;gap:8px">
+            <button class="btn-icon" onclick="App.back()"><i class="fas fa-arrow-left"></i></button>
+            <a class="nav-logo" onclick="App.go('feed')"><i class="fas fa-lock breathe"></i> OnlyFans</a>
+        </div>
+        <div class="nav-right">
+            <button class="nav-icon-btn" onclick="App.openShare()"><i class="fas fa-share-alt"></i></button>
+            <button class="nav-btn" id="navAdminBtn" onclick="App.go('admin')" style="display:none"><i class="fas fa-cog"></i> Studio</button>
+            <div class="nav-avatar" id="profileNavAvatar" onclick="App.showUserMenu()">U</div>
+        </div>
+    </nav>
+    <img class="cover-image" id="creatorCover" src="" alt="Cover">
+    <div class="profile-section">
+        <div class="profile-avatar-wrap">
+            <div class="profile-avatar" id="creatorAvatar"><i class="fas fa-user" style="color:#999;font-size:40px"></i></div>
+            <div class="online-dot" id="creatorOnlineDot" style="display:none"></div>
+        </div>
+        <div class="profile-name" id="creatorName"></div>
+        <div class="last-seen" id="creatorLastSeen"></div>
+        <div class="profile-handle" id="creatorHandle"></div>
+        <div class="profile-bio" id="creatorBio"></div>
+        <div class="url-box" id="profileUrlBox" style="display:none">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><i class="fas fa-link" style="color:var(--primary)"></i><div style="flex:1;min-width:0"><div class="text-sm text-secondary" style="margin-bottom:2px">Profile Link</div><div class="url-display" id="profileUrlDisplay" onclick="App.copyProfileLink()"></div></div></div>
+            <div style="display:flex;gap:8px"><button class="btn btn-outline btn-sm" style="flex:1" onclick="App.copyProfileLink()"><i class="fas fa-copy"></i> Copy</button><button class="btn btn-primary btn-sm" style="flex:1" onclick="App.openShare()"><i class="fas fa-share-alt"></i> Share</button></div>
+        </div>
+        <div class="profile-stats">
+            <div class="stat-item"><div class="stat-value" id="creatorStatPosts">0</div><div class="stat-label">Posts</div></div>
+            <div class="stat-item"><div class="stat-value" id="creatorStatMedia">0</div><div class="stat-label">Media</div></div>
+            <div class="stat-item"><div class="stat-value" id="creatorStatLikes">0</div><div class="stat-label">Likes</div></div>
+        </div>
+    </div>
+    <div style="padding:0 16px;margin-bottom:12px">
+        <button class="btn btn-outline btn-block" style="border-color:var(--primary);color:var(--primary);display:flex;align-items:center;justify-content:center;gap:8px" onclick="App.messageCreator()">
+            <i class="fas fa-comment-dots" style="font-size:18px"></i> Message <span id="messageBtnName"></span>
+        </button>
+    </div>
+    <div class="sub-box" id="creatorSubBox">
+        <div class="sub-box-title"><i class="fas fa-gift"></i> Choose your subscription plan</div>
+        <button class="sub-btn sub-btn-monthly" onclick="App.subscribe('monthly')"><i class="fas fa-crown"></i> MONTHLY - $<span id="subPriceMonthly">20</span>/mo</button>
+        <button class="sub-btn sub-btn-weekly" onclick="App.subscribe('weekly')"><i class="fas fa-calendar-week"></i> WEEKLY - $<span id="subPriceWeekly">5</span>/wk</button>
+        <button class="sub-btn sub-btn-vip" onclick="App.subscribe('vip')"><i class="fas fa-star"></i> VIP ACCESS - $<span id="subPriceVip">50</span></button>
+        <div class="sub-note">Cancel anytime - Unlock all exclusive content</div>
+    </div>
+    <div class="vip-section" id="vipSection" style="display:none">
+        <h3><i class="fas fa-crown" style="color:var(--gold)"></i> VIP Exclusive Videos</h3>
+        <p>Premium pay-per-view content from this creator</p>
+        <div class="vip-grid" id="vipGrid"></div>
+    </div>
+    <div class="tabs">
+        <button class="tab active" onclick="App.switchProfileTab('posts',this)">POSTS</button>
+        <button class="tab" onclick="App.switchProfileTab('media',this)">MEDIA</button>
+    </div>
+    <div id="tabPosts" class="tab-panel active"><div class="posts-grid" id="creatorPostsGrid"></div></div>
+    <div id="tabMedia" class="tab-panel"><div class="posts-grid" id="creatorMediaGrid"></div><div class="no-content" id="noMediaMsg" style="display:none"><i class="fas fa-photo-video"></i>No media yet</div></div>
+</div>
+
+<!-- ============================================================================
+     VIEW: MESSAGES
+============================================================================ -->
+<div class="view" id="view-messages">
+    <nav class="navbar">
+        <div style="display:flex;align-items:center;gap:8px">
+            <button class="btn-icon" onclick="App.back()"><i class="fas fa-arrow-left"></i></button>
+            <a class="nav-logo" onclick="App.go('feed')"><i class="fas fa-lock breathe"></i> OnlyFans</a>
+        </div>
+        <div class="nav-right">
+            <div class="nav-avatar" id="messagesNavAvatar" onclick="App.showUserMenu()">U</div>
+        </div>
+    </nav>
+    <div class="msg-layout">
+        <aside class="msg-sidebar" id="msgSidebar">
+            <div style="padding:16px;border-bottom:1px solid var(--border)">
+                <h2 style="font-size:18px;font-weight:700;margin-bottom:10px">Messages</h2>
+                <div class="search-bar" style="margin:0"><i class="fas fa-search"></i><input type="text" id="msgSearch" placeholder="Search..." oninput="App.filterMessages()"></div>
+            </div>
+            <ul class="msg-list" id="msgList"></ul>
+        </aside>
+        <div class="msg-area">
+            <div class="msg-header">
+                <div class="msg-avatar" id="chatAvatar" style="background-color:var(--border);color:#fff">U</div>
+                <div><div class="msg-name" id="chatName">Select a conversation</div><div class="msg-status" id="chatStatus"></div></div>
+                <button class="btn-icon" style="margin-left:auto" onclick="document.getElementById('msgSidebar').classList.toggle('active')"><i class="fas fa-bars"></i></button>
+            </div>
+            <div class="msg-chat" id="msgChat"></div>
+            <div class="msg-input-area" id="msgInputArea" style="display:none">
+                <button class="btn-icon" style="font-size:20px;color:var(--text-secondary);flex-shrink:0" onclick="App.openEmojiPicker()" type="button"><i class="far fa-smile"></i></button>
+                <label for="chatFileInput" style="cursor:pointer;flex-shrink:0"><i class="fas fa-image" style="font-size:20px;color:var(--text-secondary)"></i></label>
+                <input type="file" id="chatFileInput" accept="image/*,video/*" onchange="App.sendChatFile(event)" style="display:none">
+                <input type="text" class="msg-input" id="chatInput" placeholder="Type a message..." onkeydown="if(event.key==='Enter'){event.preventDefault();App.sendChatText();}">
+                <button class="msg-send" onclick="App.sendChatText()" type="button"><i class="fas fa-paper-plane"></i></button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- (Wallet removed - manual payments only) -->
+
+<!-- ============================================================================
+     VIEW: USER PROFILE
+============================================================================ -->
+<div class="view" id="view-user-profile">
+    <nav class="navbar">
+        <div style="display:flex;align-items:center;gap:8px">
+            <button class="btn-icon" onclick="App.back()"><i class="fas fa-arrow-left"></i></button>
+            <a class="nav-logo" onclick="App.go('feed')"><i class="fas fa-lock breathe"></i> OnlyFans</a>
+        </div>
+        <div class="nav-right">
+            <button class="nav-icon-btn" onclick="App.go('messages')" style="position:relative"><i class="fas fa-comment-dots"></i><span class="nav-badge" id="msgBadge" style="display:none;position:absolute;top:-4px;right:-4px">0</span></button>
+            <div class="nav-avatar" id="userProfileNavAvatar" onclick="App.showUserMenu()">U</div>
+        </div>
+    </nav>
+    <div class="p-4">
+        <div class="card" style="text-align:center;padding:24px">
+            <label for="userAvatarInput" style="cursor:pointer;display:inline-block;position:relative;margin-bottom:16px">
+                <div class="profile-avatar" id="userProfileAvatar" style="width:100px;height:100px;margin:0 auto;background-color:var(--border);display:flex;align-items:center;justify-content:center;font-size:40px;color:var(--text-secondary)"><i class="fas fa-user"></i></div>
+                <div style="position:absolute;bottom:0;right:50%;transform:translateX(200%);width:36px;height:36px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-md)"><i class="fas fa-camera"></i></div>
+            </label>
+            <input type="file" id="userAvatarInput" accept="image/*" onchange="App.updateAvatar(event)" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
+            <h2 style="font-size:22px;font-weight:700" id="userProfileName">User</h2>
+            <p style="color:var(--text-secondary);margin-top:4px" id="userProfileHandle">@username</p>
+            <p style="color:var(--text-secondary);font-size:13px;margin-top:4px" id="userProfileType">Fan Account</p>
+        </div>
+        <div class="card"><div class="card-title"><i class="fas fa-user-edit"></i> Edit Profile</div>
+            <div class="form-group"><label class="form-label">Display Name</label><input type="text" class="input" id="editDisplayName" placeholder="Your name"></div>
+            <div class="form-group"><label class="form-label">Bio</label><textarea class="textarea" id="editBio" placeholder="Tell us about yourself..."></textarea></div>
+            <button class="btn btn-primary btn-block" onclick="App.saveProfile()"><i class="fas fa-save"></i> Save Changes</button>
+        </div>
+        <div class="card"><div class="card-title"><i class="fas fa-receipt"></i> My Subscriptions</div><div id="userSubsList"><p class="no-content">No subscriptions yet</p></div></div>
+        <div class="card"><div class="card-title"><i class="fas fa-bell"></i> Notifications</div><div id="userNotifsList"><p class="no-content">No new notifications</p></div></div>
+        <div class="card"><div class="card-title"><i class="fas fa-shield-alt"></i> Change Password</div>
+            <div class="form-group"><label class="form-label">New Password</label><input type="password" class="input" id="newPassword" placeholder="Min 6 characters"></div>
+            <button class="btn btn-primary btn-block" onclick="App.changePassword()"><i class="fas fa-key"></i> Update Password</button>
+        </div>
+        <div class="danger-zone">
+            <h4><i class="fas fa-exclamation-triangle"></i> Danger Zone</h4>
+            <p>This will permanently delete your account and all data.</p>
+            <button class="btn btn-danger btn-block" onclick="App.deleteAccount()"><i class="fas fa-trash-alt"></i> Delete Account</button>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================================
+     VIEW: NOTIFICATION CENTER
+============================================================================ -->
+<div class="view" id="view-notifications">
+    <nav class="navbar">
+        <div style="display:flex;align-items:center;gap:8px">
+            <button class="btn-icon" onclick="App.back()"><i class="fas fa-arrow-left"></i></button>
+            <span style="font-size:18px;font-weight:700">Notifications</span>
+        </div>
+        <div class="nav-right">
+            <button class="btn btn-sm btn-outline" onclick="App.markAllNotifsRead()"><i class="fas fa-check-double"></i> Mark All Read</button>
+        </div>
+    </nav>
+    <div class="p-4" style="padding-bottom:80px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <div style="font-size:14px;color:var(--text-secondary)">
+                <span id="notifCenterUnread" style="font-weight:700;color:var(--primary)">0</span> unread
+            </div>
+        </div>
+        <div id="notifCenterList">
+            <div class="no-content"><i class="fas fa-bell-slash"></i><p>No notifications yet</p></div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================================
+     VIEW: CREATOR DASHBOARD (ADMIN)
+============================================================================ -->
+<div class="view" id="view-admin">
+    <div style="background:var(--bg);min-height:100vh;padding-bottom:80px">
+        <div style="background:var(--bg-card);padding:16px;border-bottom:1px solid var(--border)">
+            <div style="font-size:20px;font-weight:700;display:flex;align-items:center;gap:10px"><i class="fas fa-shield-alt" style="color:var(--red)"></i> Creator Studio</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px">
+                <span style="background:var(--red);color:#fff;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700">ADMIN</span>
+                <button class="nav-btn" onclick="App.back()"><i class="fas fa-arrow-left"></i> Back</button>
+            </div>
+        </div>
+        <div class="admin-tabs">
+            <button class="admin-tab active" onclick="App.switchAdminTab('dashboard',this)"><i class="fas fa-chart-line"></i> Dashboard</button>
+            <button class="admin-tab" onclick="App.switchAdminTab('profile',this)"><i class="fas fa-user-edit"></i> Profile</button>
+            <button class="admin-tab" onclick="App.switchAdminTab('posts',this)"><i class="fas fa-images"></i> Posts</button>
+            <button class="admin-tab" onclick="App.switchAdminTab('upload',this)"><i class="fas fa-cloud-upload-alt"></i> Upload</button>
+            <button class="admin-tab" onclick="App.switchAdminTab('vip',this)"><i class="fas fa-crown" style="color:var(--gold)"></i> VIP</button>
+            <button class="admin-tab" onclick="App.switchAdminTab('subscribers',this)"><i class="fas fa-users"></i> Subs</button>
+            <button class="admin-tab" onclick="App.switchAdminTab('messages',this)"><i class="fas fa-comment-dots"></i> Messages</button>
+            <button class="admin-tab" onclick="App.switchAdminTab('payments',this)"><i class="fas fa-money-bill-wave"></i> Payments</button>
+            <button class="admin-tab" onclick="App.switchAdminTab('settings',this)"><i class="fas fa-cog"></i> Settings</button>
+            <button class="admin-tab" onclick="App.switchAdminTab('plans',this)"><i class="fas fa-tags" style="color:var(--green)"></i> Plans</button>
+            <button class="admin-tab" onclick="App.switchAdminTab('vip-subscribers',this)"><i class="fas fa-crown" style="color:var(--gold)"></i> VIP Subs</button>
+            <button class="admin-tab" onclick="App.switchAdminTab('badge',this)"><i class="fas fa-certificate" style="color:var(--blue)"></i> Verified Badge</button>
+        </div>
+        <div class="p-4">
+            <!-- Dashboard -->
+            <div class="tab-panel active" id="admin-dashboard">
+                <div class="stats-grid">
+                    <div class="stat-card"><div class="value" id="dashEarnings">$0</div><div class="label">Earnings</div></div>
+                    <div class="stat-card stat-card-green"><div class="value" id="dashSubs">0</div><div class="label">Subscribers</div></div>
+                    <div class="stat-card stat-card-purple"><div class="value" id="dashPosts">0</div><div class="label">Posts</div></div>
+                    <div class="stat-card stat-card-gold"><div class="value" id="dashTips">$0</div><div class="label">Tips</div></div>
+                </div>
+                <!-- Like Analytics -->
+                <div class="card" style="margin-top:16px">
+                    <div class="card-title"><i class="fas fa-heart" style="color:var(--red)"></i> Like Analytics</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+                        <div style="text-align:center;padding:10px;background:rgba(239,68,68,0.1);border-radius:10px">
+                            <div style="font-size:20px;font-weight:800;color:var(--red)" id="dashTotalLikes">0</div>
+                            <div style="font-size:11px;color:var(--text-secondary)">Total Likes</div>
+                        </div>
+                        <div style="text-align:center;padding:10px;background:rgba(168,85,247,0.1);border-radius:10px">
+                            <div style="font-size:20px;font-weight:800;color:var(--purple)" id="dashBoostedLikes">0</div>
+                            <div style="font-size:11px;color:var(--text-secondary)">Boosted Likes</div>
+                        </div>
+                        <div style="text-align:center;padding:10px;background:rgba(245,158,11,0.1);border-radius:10px">
+                            <div style="font-size:20px;font-weight:800;color:var(--gold)" id="dashMostLiked">0</div>
+                            <div style="font-size:11px;color:var(--text-secondary)">Most Liked</div>
+                        </div>
+                    </div>
+                    <div id="dashMostLikedPost" style="display:none;padding:12px;background:var(--bg);border-radius:10px;border:1px solid var(--border)">
+                        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">Most Liked Post</div>
+                        <div style="display:flex;gap:10px;align-items:center">
+                            <img id="dashMostLikedImg" src="" style="width:48px;height:48px;object-fit:cover;border-radius:8px">
+                            <div style="flex:1;min-width:0">
+                                <div id="dashMostLikedCaption" style="font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
+                                <div id="dashMostLikedCount" style="font-size:12px;color:var(--red)"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Likes Per Post Table -->
+                    <div style="margin-top:12px">
+                        <div style="font-size:13px;font-weight:600;margin-bottom:8px">Likes Per Post</div>
+                        <div class="scroll-list" id="dashLikesPerPost" style="max-height:200px"></div>
+                    </div>
+                </div>
+            </div>
+            <!-- Edit Profile -->
+            <div class="tab-panel" id="admin-profile">
+                <!-- Avatar & Cover Upload -->
+                <div class="card">
+                    <div class="card-title"><i class="fas fa-camera"></i> Profile Photos</div>
+                    <div style="display:flex;gap:16px;align-items:flex-start">
+                        <!-- Avatar Upload -->
+                        <div style="text-align:center;flex:1">
+                            <div class="avatar-upload-wrap" onclick="document.getElementById('adminAvatarInput').click()">
+                                <div class="avatar-upload-preview" id="adminAvatarPreview">
+                                    <i class="fas fa-user" style="font-size:32px;color:var(--text-secondary)"></i>
+                                </div>
+                                <div class="avatar-upload-overlay"><i class="fas fa-camera" style="font-size:18px"></i></div>
+                            </div>
+                            <input type="file" id="adminAvatarInput" accept="image/*" style="display:none" onchange="App.handleAdminAvatarUpload(event)">
+                            <div style="font-size:12px;color:var(--text-secondary);margin-top:6px">Profile Picture</div>
+                        </div>
+                        <!-- Cover Upload -->
+                        <div style="flex:2">
+                            <div class="cover-upload-wrap" onclick="document.getElementById('adminCoverInput').click()">
+                                <div class="cover-upload-preview" id="adminCoverPreview">
+                                    <i class="fas fa-image" style="font-size:32px;color:var(--text-secondary)"></i>
+                                    <span style="font-size:12px;color:var(--text-secondary);margin-top:6px">Tap to upload cover photo</span>
+                                </div>
+                                <div class="cover-upload-overlay"><i class="fas fa-camera" style="font-size:20px"></i></div>
+                            </div>
+                            <input type="file" id="adminCoverInput" accept="image/*" style="display:none" onchange="App.handleAdminCoverUpload(event)">
+                            <div style="font-size:12px;color:var(--text-secondary);margin-top:6px;text-align:center">Cover Photo</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card"><div class="card-title"><i class="fas fa-user-circle"></i> Profile Info</div>
+                    <div class="form-group"><label class="form-label">Display Name</label><input type="text" class="input" id="adminEditName"></div>
+                    <div class="form-group"><label class="form-label">Bio</label><textarea class="textarea" id="adminEditBio"></textarea></div>
+                    <button class="btn btn-primary btn-block" onclick="App.saveAdminProfile()"><i class="fas fa-save"></i> Save</button>
+                </div>
+                <div class="card"><div class="card-title"><i class="fas fa-dollar-sign"></i> Pricing</div>
+                    <div class="form-group"><label class="form-label">Monthly ($)</label><input type="number" class="input" id="adminPriceMonthly" min="1"></div>
+                    <div class="form-group"><label class="form-label">Weekly ($)</label><input type="number" class="input" id="adminPriceWeekly" min="1"></div>
+                    <div class="form-group"><label class="form-label">VIP ($)</label><input type="number" class="input" id="adminPriceVip" min="1"></div>
+                    <button class="btn btn-primary btn-block" onclick="App.savePricing()"><i class="fas fa-save"></i> Save Pricing</button>
+                </div>
+            </div>
+            <!-- Manage Posts -->
+            <div class="tab-panel" id="admin-posts">
+                <div class="card"><div class="card-title"><i class="fas fa-trash-alt"></i> Manage Posts</div>
+                    <div class="posts-grid" id="managePostsGrid"></div>
+                </div>
+            </div>
+            <!-- Upload -->
+            <div class="tab-panel" id="admin-upload">
+                <div class="card"><div class="card-title"><i class="fas fa-cloud-upload-alt"></i> Upload Content</div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+                        <label class="btn btn-outline" style="cursor:pointer;display:inline-flex;gap:8px;align-items:center">
+                            <i class="fas fa-image"></i> Photos
+                            <input type="file" accept="image/*" multiple onchange="App.handleUpload(event,'image')" style="display:none">
+                        </label>
+                        <label class="btn btn-outline" style="cursor:pointer;display:inline-flex;gap:8px;align-items:center">
+                            <i class="fas fa-video"></i> Videos
+                            <input type="file" accept="video/*" onchange="App.handleUpload(event,'video')" style="display:none">
+                        </label>
+                        <label class="btn btn-outline" style="cursor:pointer;display:inline-flex;gap:8px;align-items:center">
+                            <i class="fas fa-camera"></i> Camera
+                            <input type="file" accept="image/*" capture="environment" onchange="App.handleUpload(event,'image')" style="display:none">
+                        </label>
+                    </div>
+                    <div class="upload-preview" id="uploadPreview"></div>
+                    <div class="form-group"><label class="form-label">Caption</label><textarea class="textarea" id="uploadCaption" placeholder="What's on your mind?"></textarea></div>
+                    <label style="display:flex;align-items:center;gap:10px;font-size:14px;cursor:pointer;margin-bottom:16px"><input type="checkbox" id="uploadLocked" style="width:16px;height:16px"> Lock for subscribers only</label>
+                    <button class="btn btn-primary btn-block" onclick="App.publishPost()"><i class="fas fa-paper-plane"></i> Publish</button>
+                </div>
+            </div>
+            <!-- VIP -->
+            <div class="tab-panel" id="admin-vip">
+                <div class="card"><div class="card-title"><i class="fas fa-crown" style="color:var(--gold)"></i> Upload VIP Video</div>
+                    <div style="position:relative;margin-bottom:16px">
+                        <div style="width:100%;height:160px;border:2px dashed var(--gold);border-radius:12px;background:linear-gradient(135deg,rgba(245,158,11,0.05),rgba(230,126,0,0.05));display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;cursor:pointer">
+                            <i class="fas fa-video" style="font-size:32px;color:var(--gold);margin-bottom:8px"></i>
+                            <h4 style="color:var(--gold);font-size:15px">Choose VIP Video</h4>
+                            <p style="font-size:12px;color:var(--text-secondary)">MP4, MOV, WEBM (max 100MB)</p>
+                        </div>
+                        <input type="file" accept="video/*" onchange="App.handleVipUpload(event)" style="position:absolute;inset:0;opacity:0;cursor:pointer">
+                    </div>
+                    <div id="vipVideoPreview" style="display:none;margin-bottom:16px"><video controls style="width:100%;border-radius:12px;max-height:300px;background:#000"></video></div>
+                    <div class="form-group"><label class="form-label">Title</label><input type="text" class="input" id="vipVideoTitle" placeholder="Exclusive behind the scenes"></div>
+                    <div class="form-group"><label class="form-label">Description</label><textarea class="textarea" id="vipVideoDesc" placeholder="Describe what fans will see..."></textarea></div>
+                    <div class="form-group"><label class="form-label">Price Per View ($)</label><input type="number" class="input" id="vipVideoPrice" placeholder="10" min="1" step="0.01"></div>
+                    <button class="btn btn-gold btn-block" onclick="App.publishVip()"><i class="fas fa-crown"></i> Publish VIP Video</button>
+                </div>
+                <div class="card"><div class="card-title"><i class="fas fa-list"></i> My VIP Videos</div><div id="adminVipList"></div></div>
+            </div>
+            <!-- Subscribers -->
+            <div class="tab-panel" id="admin-subscribers">
+                <div class="card">
+                    <div class="card-title"><i class="fas fa-users"></i> Subscribers</div>
+                    <!-- Stats -->
+                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">
+                        <div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:10px">
+                            <div style="font-size:18px;font-weight:800;color:var(--green)" id="subCountActive">0</div>
+                            <div style="font-size:11px;color:var(--text-secondary)">Active</div>
+                        </div>
+                        <div style="text-align:center;padding:10px;background:rgba(245,158,11,0.1);border-radius:10px">
+                            <div style="font-size:18px;font-weight:800;color:var(--gold)" id="subCountPending">0</div>
+                            <div style="font-size:11px;color:var(--text-secondary)">Pending</div>
+                        </div>
+                        <div style="text-align:center;padding:10px;background:rgba(239,68,68,0.1);border-radius:10px">
+                            <div style="font-size:18px;font-weight:800;color:var(--red)" id="subCountCancelled">0</div>
+                            <div style="font-size:11px;color:var(--text-secondary)">Cancelled</div>
+                        </div>
+                        <div style="text-align:center;padding:10px;background:rgba(107,114,128,0.1);border-radius:10px">
+                            <div style="font-size:18px;font-weight:800;color:var(--text-secondary)" id="subCountDisabled">0</div>
+                            <div style="font-size:11px;color:var(--text-secondary)">Disabled</div>
+                        </div>
+                    </div>
+                    <!-- Search -->
+                    <div class="search-bar" style="margin-bottom:12px">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="subSearch" placeholder="Search subscribers..." oninput="App.searchSubscribers(this.value)">
+                    </div>
+                    <!-- Filters -->
+                    <div class="filter-row" style="margin-bottom:12px">
+                        <button class="filter-btn active" onclick="App.filterSubs('all',this)">All</button>
+                        <button class="filter-btn" onclick="App.filterSubs('active',this)">Active</button>
+                        <button class="filter-btn" onclick="App.filterSubs('pending',this)">Pending</button>
+                        <button class="filter-btn" onclick="App.filterSubs('disabled',this)">Disabled</button>
+                        <button class="filter-btn" onclick="App.filterSubs('cancelled',this)">Cancelled</button>
+                        <button class="filter-btn" onclick="App.filterSubs('expired',this)">Expired</button>
+                    </div>
+                    <!-- List -->
+                    <div class="scroll-list" id="subscribersList" style="max-height:50vh"></div>
+                </div>
+            </div>
+            <!-- Messages -->
+            <div class="tab-panel" id="admin-messages">
+                <div class="card"><div class="card-title"><i class="fas fa-inbox"></i> Fan Messages</div>
+                    <div class="search-bar"><i class="fas fa-search"></i><input type="text" id="adminMsgSearch" placeholder="Search fans..." oninput="App.filterAdminMessages()"></div>
+                    <div id="adminMsgList"></div>
+                </div>
+            </div>
+            <!-- Payments -->
+            <div class="tab-panel" id="admin-payments">
+                <div class="card"><div class="card-title"><i class="fas fa-money-bill-wave"></i> Payment Requests</div>
+                    <div class="filter-row">
+                        <button class="filter-btn active" onclick="App.filterPayments('all',this)">All</button>
+                        <button class="filter-btn" onclick="App.filterPayments('pending',this)">Pending</button>
+                        <button class="filter-btn" onclick="App.filterPayments('approved',this)">Approved</button>
+                        <button class="filter-btn" onclick="App.filterPayments('rejected',this)">Rejected</button>
+                        <button class="filter-btn" onclick="App.filterPayments('giftcard',this)">Gift Cards</button>
+                        <button class="filter-btn" onclick="App.filterPayments('btc',this)">Bitcoin</button>
+                        <button class="filter-btn" onclick="App.filterPayments('usdt',this)">USDT</button>
+                    </div>
+                    <div id="paymentsList"></div>
+                </div>
+            </div>
+            <!-- Verified Badge -->
+            <div class="tab-panel" id="admin-badge">
+                <div class="card" id="badgeStatusCard">
+                    <div class="card-title"><i class="fas fa-certificate" style="color:var(--blue)"></i> Verified Badge Status</div>
+                    <div id="badgeStatusContent">
+                        <div class="badge-status-box" id="badgeStatusBox">
+                            <div class="badge-status-icon"><i class="fas fa-certificate"></i></div>
+                            <div class="badge-status-text" id="badgeStatusText">Loading...</div>
+                            <div class="badge-status-sub" id="badgeStatusSub"></div>
+                        </div>
+                        <div id="badgeDetails" style="display:none;margin-top:16px">
+                            <div class="badge-detail-row"><span>Activation Date</span><span id="badgeActivatedAt">-</span></div>
+                            <div class="badge-detail-row"><span>Expiry Date</span><span id="badgeExpiresAt">-</span></div>
+                            <div class="badge-detail-row"><span>Days Remaining</span><span id="badgeDaysLeft">-</span></div>
+                        </div>
+                        <div id="badgeRenewalAlert" style="display:none;margin-top:16px;padding:12px;background:rgba(245,158,11,0.1);border:1px solid var(--gold);border-radius:12px;font-size:13px;color:var(--gold)">
+                            <i class="fas fa-exclamation-triangle"></i> Your verified badge will expire soon. Renew now to keep your badge.
+                        </div>
+                        <button class="btn btn-primary btn-block" id="badgeActionBtn" style="margin-top:16px" onclick="App.openBadgeApplyModal()">Apply for Verified Badge</button>
+                    </div>
+                </div>
+            </div>
+            <!-- VIP Subscribers -->
+            <div class="tab-panel" id="admin-vip-subscribers">
+                <div class="card">
+                    <div class="card-title"><i class="fas fa-crown" style="color:var(--gold)"></i> VIP Subscribers</div>
+                    <!-- Stats -->
+                    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px">
+                        <div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:10px">
+                            <div style="font-size:16px;font-weight:800;color:var(--green)" id="vipSubCountActive">0</div>
+                            <div style="font-size:10px;color:var(--text-secondary)">Active</div>
+                        </div>
+                        <div style="text-align:center;padding:10px;background:rgba(245,158,11,0.1);border-radius:10px">
+                            <div style="font-size:16px;font-weight:800;color:var(--gold)" id="vipSubCountPending">0</div>
+                            <div style="font-size:10px;color:var(--text-secondary)">Pending</div>
+                        </div>
+                        <div style="text-align:center;padding:10px;background:rgba(107,114,128,0.1);border-radius:10px">
+                            <div style="font-size:16px;font-weight:800;color:var(--text-secondary)" id="vipSubCountExpired">0</div>
+                            <div style="font-size:10px;color:var(--text-secondary)">Expired</div>
+                        </div>
+                        <div style="text-align:center;padding:10px;background:rgba(239,68,68,0.1);border-radius:10px">
+                            <div style="font-size:16px;font-weight:800;color:var(--red)" id="vipSubCountDeclined">0</div>
+                            <div style="font-size:10px;color:var(--text-secondary)">Declined</div>
+                        </div>
+                        <div style="text-align:center;padding:10px;background:rgba(99,102,241,0.1);border-radius:10px">
+                            <div style="font-size:16px;font-weight:800;color:var(--purple)" id="vipSubCountDisabled">0</div>
+                            <div style="font-size:10px;color:var(--text-secondary)">Disabled</div>
+                        </div>
+                    </div>
+                    <!-- Search -->
+                    <div class="search-bar" style="margin-bottom:12px">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="vipSubSearch" placeholder="Search VIP subscribers..." oninput="App.searchVipSubscribers(this.value)">
+                    </div>
+                    <!-- Filters -->
+                    <div class="filter-row" style="margin-bottom:12px">
+                        <button class="filter-btn active" onclick="App.filterVipSubscribers('all',this)">All</button>
+                        <button class="filter-btn" onclick="App.filterVipSubscribers('active',this)">Active</button>
+                        <button class="filter-btn" onclick="App.filterVipSubscribers('pending',this)">Pending</button>
+                        <button class="filter-btn" onclick="App.filterVipSubscribers('expired',this)">Expired</button>
+                        <button class="filter-btn" onclick="App.filterVipSubscribers('declined',this)">Declined</button>
+                        <button class="filter-btn" onclick="App.filterVipSubscribers('disabled',this)">Disabled</button>
+                    </div>
+                    <!-- List -->
+                    <div class="scroll-list" id="vipSubscribersList" style="max-height:50vh"></div>
+                </div>
+            </div>
+            <!-- Settings -->
+            <div class="tab-panel" id="admin-settings">
+                <div class="card"><div class="card-title"><i class="fas fa-wallet"></i> Payment Setup</div>
+                    <div class="card" style="margin:0 0 12px 0">
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><i class="fab fa-bitcoin" style="color:#f7931a;font-size:20px"></i><h4 style="margin:0;font-size:15px">Bitcoin (BTC)</h4></div>
+                        <div class="form-group"><label class="form-label">BTC Address</label><input type="text" class="input" id="creatorBtcAddress" placeholder="Your Bitcoin address"></div>
+                        <div class="form-group"><label class="form-label">BTC QR Code</label>
+                            <div class="qr-upload-wrap" onclick="document.getElementById('btcQrInput').click()">
+                                <div class="qr-upload-preview" id="btcQrPreview"><i class="fas fa-qrcode" style="font-size:28px;color:var(--text-secondary)"></i><span style="font-size:11px;color:var(--text-secondary);margin-top:4px">Tap to upload QR</span></div>
+                                <div class="qr-upload-overlay"><i class="fas fa-camera" style="font-size:16px"></i></div>
+                            </div>
+                            <input type="file" id="btcQrInput" accept="image/*" style="display:none" onchange="App.handleBtcQrUpload(event)">
+                        </div>
+                        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="creatorBtcEnabled" style="width:16px;height:16px"> Accept Bitcoin</label>
+                    </div>
+                    <div class="card" style="margin:0 0 12px 0">
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><i class="fas fa-coins" style="color:#26a17b;font-size:20px"></i><h4 style="margin:0;font-size:15px">USDT (Tether)</h4></div>
+                        <div class="form-group"><label class="form-label">USDT Address</label><input type="text" class="input" id="creatorUsdtAddress" placeholder="Your USDT address"></div>
+                        <div class="form-group"><label class="form-label">USDT QR Code</label>
+                            <div class="qr-upload-wrap" onclick="document.getElementById('usdtQrInput').click()">
+                                <div class="qr-upload-preview" id="usdtQrPreview"><i class="fas fa-qrcode" style="font-size:28px;color:var(--text-secondary)"></i><span style="font-size:11px;color:var(--text-secondary);margin-top:4px">Tap to upload QR</span></div>
+                                <div class="qr-upload-overlay"><i class="fas fa-camera" style="font-size:16px"></i></div>
+                            </div>
+                            <input type="file" id="usdtQrInput" accept="image/*" style="display:none" onchange="App.handleUsdtQrUpload(event)">
+                        </div>
+                        <div class="form-group"><label class="form-label">Network</label><select class="select" id="creatorUsdtNetwork"><option value="TRC20">TRC20 (Tron)</option><option value="ERC20">ERC20 (Ethereum)</option><option value="BEP20">BEP20 (BSC)</option></select></div>
+                        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="checkbox" id="creatorUsdtEnabled" style="width:16px;height:16px"> Accept USDT</label>
+                    </div>
+                    <button class="btn btn-primary btn-block" onclick="App.savePaymentSettings()"><i class="fas fa-save"></i> Save Payment Settings</button>
+                </div>
+                <div class="card"><div class="card-title"><i class="fas fa-cog"></i> Site Settings</div>
+                    <div class="toggle-row"><div><div class="toggle-title">Profile Visibility</div><div class="toggle-desc">Make profile visible to non-logged users</div></div><div class="toggle on" id="toggleVisibility" onclick="App.toggleSetting(this,'profile_visible')"></div></div>
+                    <div class="toggle-row"><div><div class="toggle-title">Require Subscription</div><div class="toggle-desc">Lock all content behind paywall</div></div><div class="toggle" id="toggleRequireSub" onclick="App.toggleSetting(this,'require_subscription')"></div></div>
+                    <div class="toggle-row"><div><div class="toggle-title">Allow Tips</div><div class="toggle-desc">Enable tipping</div></div><div class="toggle on" id="toggleTips" onclick="App.toggleSetting(this,'allow_tips')"></div></div>
+                </div>
+            </div>
+            <!-- Subscription Plans -->
+            <div class="tab-panel" id="admin-plans">
+                <div class="card">
+                    <div class="card-title"><i class="fas fa-tags" style="color:var(--green)"></i> Subscription Plans</div>
+                    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">Set your own prices. Fans will see these prices when subscribing. Changing prices only affects new subscribers.</p>
+                    <!-- Weekly Plan -->
+                    <div class="plan-card" style="border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px;background:var(--bg)">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                            <div style="display:flex;align-items:center;gap:10px"><i class="fas fa-calendar-week" style="color:var(--primary);font-size:20px"></i><div><div style="font-weight:700">Weekly</div><div style="font-size:12px;color:var(--text-secondary)">7 days access</div></div></div>
+                            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="planWeeklyEnabled" checked> Enabled</label>
+                        </div>
+                        <div class="form-group" style="margin:0"><label class="form-label" style="font-size:12px">Price (USD)</label><input type="number" class="input" id="planWeeklyPrice" value="5" min="0" step="0.01"></div>
+                    </div>
+                    <!-- Monthly Plan -->
+                    <div class="plan-card" style="border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px;background:var(--bg)">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                            <div style="display:flex;align-items:center;gap:10px"><i class="fas fa-crown" style="color:var(--gold);font-size:20px"></i><div><div style="font-weight:700">Monthly</div><div style="font-size:12px;color:var(--text-secondary)">30 days access</div></div></div>
+                            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="planMonthlyEnabled" checked> Enabled</label>
+                        </div>
+                        <div class="form-group" style="margin:0"><label class="form-label" style="font-size:12px">Price (USD)</label><input type="number" class="input" id="planMonthlyPrice" value="20" min="0" step="0.01"></div>
+                    </div>
+                    <!-- VIP Plan -->
+                    <div class="plan-card" style="border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px;background:var(--bg)">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                            <div style="display:flex;align-items:center;gap:10px"><i class="fas fa-star" style="color:var(--red);font-size:20px"></i><div><div style="font-weight:700">VIP</div><div style="font-size:12px;color:var(--text-secondary)">2 days access</div></div></div>
+                            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="planVipEnabled" checked> Enabled</label>
+                        </div>
+                        <div class="form-group" style="margin:0"><label class="form-label" style="font-size:12px">Price (USD)</label><input type="number" class="input" id="planVipPrice" value="50" min="0" step="0.01"></div>
+                    </div>
+                    <button class="btn btn-primary btn-block" onclick="App.saveSubscriptionPlans()" style="margin-top:4px"><i class="fas fa-save"></i> Save Plans</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================================
+     VIEW: OWNER DASHBOARD
+============================================================================ -->
+<div class="view" id="view-owner">
+    <nav class="navbar">
+        <div style="display:flex;align-items:center;gap:8px">
+            <button class="btn-icon" onclick="App.back()"><i class="fas fa-arrow-left"></i></button>
+            <a class="nav-logo" onclick="App.go('landing')"><i class="fas fa-lock breathe"></i> OnlyFans</a>
+            <span style="background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:2px 10px;border-radius:20px">OWNER</span>
+        </div>
+        <div class="nav-right">
+            <button class="btn btn-outline btn-sm" onclick="App.closeOwner()"><i class="fas fa-sign-out-alt"></i> Exit</button>
+        </div>
+    </nav>
+    <div class="p-4" style="max-width:1200px;margin:0 auto">
+        <div class="mb-4">
+            <h1 style="font-size:24px;font-weight:800"><i class="fas fa-chart-line" style="color:var(--primary)"></i> Site Overview</h1>
+            <p style="color:var(--text-secondary);font-size:14px">Monitor all users, creators, posts, and transactions</p>
+        </div>
+        <div class="stats-grid stats-grid-3">
+            <div class="stat-card"><div class="value" id="ownerStatUsers">0</div><div class="label">Total Users</div></div>
+            <div class="stat-card stat-card-green"><div class="value" id="ownerStatCreators">0</div><div class="label">Content Creators</div></div>
+            <div class="stat-card stat-card-purple"><div class="value" id="ownerStatPosts">0</div><div class="label">Total Posts</div></div>
+            <div class="stat-card stat-card-gold"><div class="value" id="ownerStatSubs">0</div><div class="label">Active Subs</div></div>
+            <div class="stat-card stat-card-red"><div class="value" id="ownerStatRevenue">$0</div><div class="label">Total Revenue</div></div>
+            <div class="stat-card stat-card-blue"><div class="value" id="ownerStatMsgs">0</div><div class="label">Total Msgs</div></div>
+        </div>
+        <div class="filter-row owner-filter-row">
+            <button class="filter-btn active" onclick="App.switchOwnerTab('users',this)"><i class="fas fa-users"></i> Users</button>
+            <button class="filter-btn" onclick="App.switchOwnerTab('creators',this)"><i class="fas fa-video"></i> Creators</button>
+            <button class="filter-btn" onclick="App.switchOwnerTab('posts',this)"><i class="fas fa-images"></i> Posts</button>
+            <button class="filter-btn" onclick="App.switchOwnerTab('subs',this)"><i class="fas fa-credit-card"></i> Subs</button>
+            <button class="filter-btn" onclick="App.switchOwnerTab('trans',this)"><i class="fas fa-dollar-sign"></i> Trans</button>
+            <button class="filter-btn" onclick="App.switchOwnerTab('boost',this)"><i class="fas fa-rocket"></i> Boost</button>
+            <button class="filter-btn" onclick="App.switchOwnerTab('badges',this)"><i class="fas fa-check-circle"></i> Badges</button>
+        </div>
+        <div id="ownerTab-users" class="owner-tab">
+            <div class="card"><div class="card-title"><i class="fas fa-users"></i> All Users</div><div class="scroll-list" id="ownerUsersList"></div></div>
+        </div>
+        <div id="ownerTab-creators" class="owner-tab" style="display:none">
+            <div class="card"><div class="card-title"><i class="fas fa-video"></i> All Creators</div><div class="scroll-list" id="ownerCreatorsList"></div></div>
+        </div>
+        <div id="ownerTab-posts" class="owner-tab" style="display:none">
+            <div class="card"><div class="card-title"><i class="fas fa-images"></i> All Posts</div><div class="scroll-list" id="ownerPostsList"></div></div>
+        </div>
+        <div id="ownerTab-subs" class="owner-tab" style="display:none">
+            <div class="card"><div class="card-title"><i class="fas fa-credit-card"></i> All Subscriptions</div>
+                <div class="filter-row" style="margin-bottom:12px">
+                    <button class="filter-btn active" onclick="App.filterOwnerSubs('all',this)">All</button>
+                    <button class="filter-btn" onclick="App.filterOwnerSubs('approved',this)">Approved</button>
+                    <button class="filter-btn" onclick="App.filterOwnerSubs('pending',this)">Pending</button>
+                </div>
+                <div class="scroll-list" id="ownerSubsList"></div>
+            </div>
+        </div>
+        <div id="ownerTab-trans" class="owner-tab" style="display:none">
+            <div class="card">
+                <div class="card-title"><i class="fas fa-dollar-sign"></i> All Transactions</div>
+                <div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px" id="transCount">0 transactions</div>
+                <!-- Search -->
+                <div class="search-bar" style="margin-bottom:10px">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="transSearch" placeholder="Search by fan, creator, or transaction ID..." oninput="App.searchOwnerTrans(this.value)">
+                </div>
+                <!-- Filters -->
+                <div class="filter-row" style="margin-bottom:8px">
+                    <button class="filter-btn active" onclick="App.filterOwnerTrans('all',this)">All</button>
+                    <button class="filter-btn" onclick="App.filterOwnerTrans('pending',this)">Pending</button>
+                    <button class="filter-btn" onclick="App.filterOwnerTrans('approved',this)">Approved</button>
+                    <button class="filter-btn" onclick="App.filterOwnerTrans('rejected',this)">Declined</button>
+                </div>
+                <div class="filter-row" style="margin-bottom:8px">
+                    <button class="filter-btn" onclick="App.filterOwnerTrans('weekly',this)">Weekly</button>
+                    <button class="filter-btn" onclick="App.filterOwnerTrans('monthly',this)">Monthly</button>
+                    <button class="filter-btn" onclick="App.filterOwnerTrans('vip',this)">VIP</button>
+                </div>
+                <div class="filter-row" style="margin-bottom:10px">
+                    <button class="filter-btn" onclick="App.filterOwnerTrans('giftcard',this)">Gift Card</button>
+                    <button class="filter-btn" onclick="App.filterOwnerTrans('bitcoin',this)">Bitcoin</button>
+                    <button class="filter-btn" onclick="App.filterOwnerTrans('usdt',this)">USDT</button>
+                    <select class="filter-btn" style="margin-left:auto;font-size:12px;padding:6px 10px" onchange="App.sortOwnerTrans(this.value)">
+                        <option value="newest">Newest First</option>
+                        <option value="oldest">Oldest First</option>
+                        <option value="highest">Highest Amount</option>
+                        <option value="lowest">Lowest Amount</option>
+                    </select>
+                </div>
+                <div class="scroll-list" id="ownerTransList"></div>
+            </div>
+        </div>
+        <div id="ownerTab-boost" class="owner-tab" style="display:none">
+            <div class="card">
+                <div class="card-title"><i class="fas fa-rocket" style="color:var(--purple)"></i> Boost Post Likes</div>
+                <p style="color:var(--text-secondary);font-size:14px;margin-bottom:16px">Search posts and boost likes. Only the Owner can boost.</p>
+                <!-- Post Count -->
+                <div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px" id="boostPostCount">0 posts loaded</div>
+                <!-- Boost Search -->
+                <div class="search-bar" style="margin-bottom:12px">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="boostSearchInput" placeholder="Search posts by caption or creator..." oninput="App.searchBoostPosts(this.value)">
+                </div>
+                <!-- Filters -->
+                <div class="filter-row" style="margin-bottom:12px">
+                    <button class="filter-btn active" onclick="App.applyBoostFilter('all', this)">All</button>
+                    <button class="filter-btn" onclick="App.applyBoostFilter('photos', this)">Photos</button>
+                    <button class="filter-btn" onclick="App.applyBoostFilter('videos', this)">Videos</button>
+                    <button class="filter-btn" onclick="App.applyBoostFilter('most_liked', this)">Most Liked</button>
+                    <button class="filter-btn" onclick="App.applyBoostFilter('newest', this)">Newest</button>
+                    <button class="filter-btn" onclick="App.applyBoostFilter('oldest', this)">Oldest</button>
+                </div>
+                <!-- Boost Stats -->
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
+                    <div style="text-align:center;padding:10px;background:rgba(168,85,247,0.1);border-radius:10px">
+                        <div style="font-size:18px;font-weight:800;color:var(--purple)" id="boostStatTotal">0</div>
+                        <div style="font-size:11px;color:var(--text-secondary)">Total Boosted</div>
+                    </div>
+                    <div style="text-align:center;padding:10px;background:rgba(59,130,246,0.1);border-radius:10px">
+                        <div style="font-size:18px;font-weight:800;color:var(--blue)" id="boostStatPosts">0</div>
+                        <div style="font-size:11px;color:var(--text-secondary)">Posts Boosted</div>
+                    </div>
+                    <div style="text-align:center;padding:10px;background:rgba(16,185,129,0.1);border-radius:10px">
+                        <div style="font-size:18px;font-weight:800;color:var(--green)" id="boostStatRecords">0</div>
+                        <div style="font-size:11px;color:var(--text-secondary)">Boost Records</div>
+                    </div>
+                </div>
+                <!-- Boost Results -->
+                <div id="boostPostsList"></div>
+            </div>
+            <!-- Boost History -->
+            <div class="card" style="margin-top:16px">
+                <div class="card-title"><i class="fas fa-history" style="color:var(--text-secondary)"></i> Boost History</div>
+                <div class="scroll-list" id="boostHistoryList"></div>
+            </div>
+        </div>
+        <div id="ownerTab-badges" class="owner-tab" style="display:none">
+            <div class="card">
+                <div class="card-title"><i class="fas fa-certificate" style="color:var(--blue)"></i> Verified Badge Requests</div>
+                <!-- Price Management -->
+                <div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px">
+                    <div style="font-weight:600;font-size:14px;margin-bottom:12px"><i class="fas fa-dollar-sign"></i> Badge Pricing</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+                        <div class="form-group" style="margin:0"><label class="form-label" style="font-size:12px">USD Price ($)</label><input type="number" class="input" id="ownerBadgePriceUsd" value="8.00" step="0.01" min="0"></div>
+                        <div class="form-group" style="margin:0"><label class="form-label" style="font-size:12px">NGN Price (&#8358;)</label><input type="number" class="input" id="ownerBadgePriceNgn" value="11200" step="1" min="0"></div>
+                    </div>
+                    <button class="btn btn-primary btn-sm" onclick="App.updateBadgePrice()"><i class="fas fa-save"></i> Update Price</button>
+                </div>
+                <!-- Filters -->
+                <div class="filter-row" style="margin-bottom:12px">
+                    <button class="filter-btn active" onclick="App.filterOwnerBadges('all',this)">All</button>
+                    <button class="filter-btn" onclick="App.filterOwnerBadges('pending',this)">Pending</button>
+                    <button class="filter-btn" onclick="App.filterOwnerBadges('active',this)">Active</button>
+                    <button class="filter-btn" onclick="App.filterOwnerBadges('expired',this)">Expired</button>
+                    <button class="filter-btn" onclick="App.filterOwnerBadges('rejected',this)">Rejected</button>
+                    <button class="filter-btn" onclick="App.filterOwnerBadges('suspended',this)">Suspended</button>
+                </div>
+                <!-- Stats -->
+                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">
+                    <div style="text-align:center;padding:10px;background:rgba(59,130,246,0.1);border-radius:10px">
+                        <div style="font-size:20px;font-weight:800;color:var(--blue)" id="ownerBadgeCountActive">0</div>
+                        <div style="font-size:11px;color:var(--text-secondary)">Active</div>
+                    </div>
+                    <div style="text-align:center;padding:10px;background:rgba(245,158,11,0.1);border-radius:10px">
+                        <div style="font-size:20px;font-weight:800;color:var(--gold)" id="ownerBadgeCountPending">0</div>
+                        <div style="font-size:11px;color:var(--text-secondary)">Pending</div>
+                    </div>
+                    <div style="text-align:center;padding:10px;background:rgba(107,114,128,0.1);border-radius:10px">
+                        <div style="font-size:20px;font-weight:800;color:var(--text-secondary)" id="ownerBadgeCountExpired">0</div>
+                        <div style="font-size:11px;color:var(--text-secondary)">Expired</div>
+                    </div>
+                    <div style="text-align:center;padding:10px;background:rgba(239,68,68,0.1);border-radius:10px">
+                        <div style="font-size:20px;font-weight:800;color:var(--red)" id="ownerBadgeCountRejected">0</div>
+                        <div style="font-size:11px;color:var(--text-secondary)">Rejected</div>
+                    </div>
+                </div>
+                <div class="scroll-list" id="ownerBadgeList"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================================
+     VIEW: PAYMENT STATUS
+============================================================================ -->
+<div class="view" id="view-payment-status">
+    <nav class="navbar">
+        <div style="display:flex;align-items:center;gap:8px"><a class="nav-logo" onclick="App.go('feed')"><i class="fas fa-lock breathe"></i> OnlyFans</a></div>
+        <div class="nav-right"><div class="nav-avatar" id="paymentStatusNavAvatar">U</div></div>
+    </nav>
+    <div style="padding:24px 16px;max-width:500px;margin:0 auto;text-align:center;min-height:calc(100vh - 60px);display:flex;flex-direction:column;justify-content:center;align-items:center">
+        <div id="paymentStatusIcon"></div>
+        <h1 id="paymentStatusTitle" style="font-size:24px;font-weight:700;margin:20px 0 12px">Payment Status</h1>
+        <p id="paymentStatusDesc" style="color:var(--text-secondary);font-size:15px;line-height:1.6;margin-bottom:24px;max-width:360px"></p>
+        <div id="paymentStatusDetails" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:16px;padding:20px;margin-bottom:24px;text-align:left;display:none"></div>
+        <div id="paymentStatusActions" style="display:flex;flex-direction:column;gap:10px;width:100%"></div>
+    </div>
+</div>
+
+<!-- ============================================================================
+     MODALS
+============================================================================ -->
+
+<!-- Auth Modal -->
+<div class="modal-overlay" id="authModal" onclick="if(event.target===this)App.closeModal('authModal')">
+    <div class="modal-card" onclick="event.stopPropagation()">
+        <div class="modal-header"><h2 id="authTitle">Welcome</h2><button class="modal-close" onclick="App.closeModal('authModal')"><i class="fas fa-times"></i></button></div>
+        <div class="tabs" style="margin-bottom:20px"><button class="tab active" id="authTabLogin" onclick="App.switchAuthTab('login')" style="flex:none;padding:10px 20px">Log In</button><button class="tab" id="authTabSignup" onclick="App.switchAuthTab('signup')" style="flex:none;padding:10px 20px">Sign Up</button></div>
+        <div id="authLoginPanel">
+            <div class="form-group"><label class="form-label">Email</label><input type="email" class="input" id="loginEmail" placeholder="your@email.com"></div>
+            <div class="form-group"><label class="form-label">Password</label><input type="password" class="input" id="loginPassword" placeholder="Enter password"></div>
+            <button class="btn btn-primary btn-block" onclick="App.handleLogin()"><i class="fas fa-sign-in-alt"></i> Log In</button>
+            <div style="text-align:center;margin-top:12px"><a href="#" onclick="App.showForgot();return false" style="font-size:13px;color:var(--primary)">Forgot password?</a></div>
+        </div>
+        <div id="authSignupPanel" style="display:none">
+            <div class="form-group"><label class="form-label">Username</label><input type="text" class="input" id="signupUsername" placeholder="Choose a unique username"></div>
+            <div class="form-group"><label class="form-label">Display Name</label><input type="text" class="input" id="signupDisplayName" placeholder="Your display name"></div>
+            <div class="form-group"><label class="form-label">Email</label><input type="email" class="input" id="signupEmail" placeholder="your@email.com"></div>
+            <div class="form-group"><label class="form-label">Password</label><input type="password" class="input" id="signupPassword" placeholder="Min 6 characters"></div>
+            <div class="form-group"><label class="form-label">Confirm</label><input type="password" class="input" id="signupConfirm" placeholder="Confirm password"></div>
+            <div class="form-group">
+                <label class="form-label">Account Type</label>
+                <div id="accountTypeDisplay" style="padding:12px 16px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);font-size:15px">Fan / Subscriber</div>
+                <input type="hidden" id="signupType" value="fan">
+                <button type="button" class="btn btn-outline btn-sm" style="margin-top:8px;width:100%" id="switchAccountTypeBtn" onclick="App.onSwitchAccountType()"><i class="fas fa-exchange-alt"></i> Switch to Content Creator</button>
+            </div>
+            <div class="form-group" id="adminPasswordBox" style="display:none">
+                <label class="form-label"><i class="fas fa-shield-alt" style="color:var(--primary)"></i> Admin Password</label>
+                <input type="password" class="input" id="creatorAdminPassword" placeholder="Set your admin panel password">
+                <p style="font-size:12px;color:var(--text-secondary);margin-top:4px">This password will be used to access your Creator Studio.</p>
+            </div>
+            <label style="display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--text-secondary);margin-bottom:16px;cursor:pointer"><input type="checkbox" id="ageConfirm" style="margin-top:3px;width:16px;height:16px"> I confirm I am 18+ and agree to Terms</label>
+            <button class="btn btn-primary btn-block" onclick="App.handleSignup()"><i class="fas fa-user-plus"></i> Create Account</button>
+        </div>
+    </div>
+</div>
+
+<!-- Forgot Password Modal -->
+<div class="modal-overlay" id="forgotModal" onclick="if(event.target===this)App.closeModal('forgotModal')">
+    <div class="modal-card" onclick="event.stopPropagation()">
+        <div class="modal-header"><h2><i class="fas fa-key" style="color:var(--primary)"></i> Reset Password</h2><button class="modal-close" onclick="App.closeModal('forgotModal')"><i class="fas fa-times"></i></button></div>
+        <p style="color:var(--text-secondary);font-size:14px;margin-bottom:16px">Enter your email and we'll send you a reset link.</p>
+        <div class="form-group"><label class="form-label">Email</label><input type="email" class="input" id="forgotEmail" placeholder="your@email.com"></div>
+        <button class="btn btn-primary btn-block" onclick="App.handleForgot()"><i class="fas fa-paper-plane"></i> Send Reset Link</button>
+    </div>
+</div>
+
+<!-- Creator Access Modal (unlocks Content Creator signup) -->
+<div class="modal-overlay" id="creatorAccessModal" onclick="if(event.target===this)App.closeModal('creatorAccessModal')">
+    <div class="modal-card" onclick="event.stopPropagation()">
+        <div class="modal-header"><h2><i class="fas fa-lock" style="color:var(--primary)"></i> Creator Access</h2><button class="modal-close" onclick="App.closeModal('creatorAccessModal');App.cancelCreatorSwitch()"><i class="fas fa-times"></i></button></div>
+        <p style="color:var(--text-secondary);font-size:14px;text-align:center;margin-bottom:20px">Enter the creator password to unlock Content Creator registration</p>
+        <div class="form-group"><input type="password" class="input" id="creatorUnlockPassword" placeholder="Enter creator password" onkeypress="if(event.key==='Enter')App.unlockCreator()"></div>
+        <button class="btn btn-primary btn-block" onclick="App.unlockCreator()"><i class="fas fa-unlock"></i> Unlock Content Creator</button>
+    </div>
+</div>
+
+<!-- Creator Studio Login Modal -->
+<div class="modal-overlay" id="creatorStudioModal" onclick="if(event.target===this)App.closeModal('creatorStudioModal')">
+    <div class="modal-card" onclick="event.stopPropagation()">
+        <div class="modal-header"><h2><i class="fas fa-video" style="color:var(--primary)"></i> Creator Studio</h2><button class="modal-close" onclick="App.closeModal('creatorStudioModal')"><i class="fas fa-times"></i></button></div>
+        <p style="color:var(--text-secondary);font-size:14px;text-align:center;margin-bottom:20px">Enter your admin password to access your Creator Studio</p>
+        <div class="form-group"><input type="password" class="input" id="creatorStudioPasswordInput" placeholder="Your admin password" onkeypress="if(event.key==='Enter')App.verifyCreatorStudio()"></div>
+        <button class="btn btn-primary btn-block" onclick="App.verifyCreatorStudio()"><i class="fas fa-unlock-alt"></i> Access Studio</button>
+    </div>
+</div>
+
+<!-- Owner Password Modal -->
+<div class="modal-overlay" id="ownerModal" onclick="if(event.target===this)App.closeModal('ownerModal')">
+    <div class="modal-card" onclick="event.stopPropagation()">
+        <div class="modal-header"><h2><i class="fas fa-shield-alt" style="color:var(--red)"></i> Owner Dashboard</h2><button class="modal-close" onclick="App.closeModal('ownerModal')"><i class="fas fa-times"></i></button></div>
+        <p style="color:var(--text-secondary);margin-bottom:16px;text-align:center">Enter owner password to access</p>
+        <div class="form-group"><input type="password" class="input" id="ownerPasswordInput" placeholder="Enter password" onkeypress="if(event.key==='Enter')App.verifyOwner()"></div>
+        <button class="btn btn-primary btn-block" onclick="App.verifyOwner()"><i class="fas fa-unlock-alt"></i> Access</button>
+    </div>
+</div>
+
+<!-- Payment Modal -->
+<div class="modal-overlay" id="paymentModal" onclick="if(event.target===this)App.closeModal('paymentModal')">
+    <div class="modal-card" style="max-width:500px" onclick="event.stopPropagation()">
+        <div class="modal-header"><h2>Complete Payment</h2><button class="modal-close" onclick="App.closeModal('paymentModal')"><i class="fas fa-times"></i></button></div>
+        <div id="paymentTargetInfo" style="margin-bottom:16px;padding:12px;background:var(--bg);border-radius:10px;border:1px solid var(--border)"></div>
+        <div class="tabs" style="margin-bottom:16px"><button class="tab active" onclick="App.switchPayTab('giftcard',this)">Gift Card</button><button class="tab" onclick="App.switchPayTab('btc',this)">Bitcoin</button><button class="tab" onclick="App.switchPayTab('usdt',this)">USDT</button></div>
+        <!-- Gift Card -->
+        <div id="payPanelGiftcard" class="tab-panel active">
+            <div class="form-group">
+                <label class="form-label">Gift Card Type</label>
+                <div style="display:flex;gap:10px;flex-wrap:wrap">
+                    <div class="pay-card" data-gc="razer" onclick="App.selectGC('razer')" id="gcRazer"><div class="pay-icon" style="background:rgba(0,255,0,0.1);color:#0a0"><i class="fas fa-bolt"></i></div><div><div class="pay-title">Razer Gold</div></div></div>
+                    <div class="pay-card" data-gc="apple" onclick="App.selectGC('apple')" id="gcApple"><div class="pay-icon" style="background:rgba(0,0,0,0.05);color:var(--text)"><i class="fab fa-apple"></i></div><div><div class="pay-title">Apple Gift Card</div></div></div>
+                    <div class="pay-card" data-gc="steam" onclick="App.selectGC('steam')" id="gcSteam"><div class="pay-icon" style="background:rgba(0,100,200,0.1);color:#06c"><i class="fab fa-steam"></i></div><div><div class="pay-title">Steam Gift Card</div></div></div>
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div class="form-group"><label class="form-label">Card Value *</label><input type="text" class="input" id="gcValue" placeholder="e.g. 50"></div>
+                <div class="form-group"><label class="form-label">Card Code *</label><input type="text" class="input" id="gcCode" placeholder="Enter code"></div>
+            </div>
+            <!-- Searchable Country Dropdown -->
+            <div class="form-group"><label class="form-label">Country *</label>
+                <div class="gc-country-wrap">
+                    <input type="text" class="input" id="gcCountryInput" placeholder="Search country..." oninput="App.filterCountries(this.value)" onclick="App.showCountryList()">
+                    <div class="gc-country-list" id="gcCountryList"></div>
+                    <input type="hidden" id="gcCountry" value="">
+                </div>
+            </div>
+            <!-- Gift Card Image Uploads -->
+            <div class="form-group"><label class="form-label">Front of Gift Card *</label>
+                <div class="gc-upload-box" id="gcFrontBox" onclick="document.getElementById('gcFrontInput').click()">
+                    <div class="gc-upload-placeholder" id="gcFrontPreview"><i class="fas fa-image"></i><span>Tap to upload front</span></div>
+                </div>
+                <input type="file" id="gcFrontInput" accept="image/*" style="display:none" onchange="App.handleGcFrontUpload(event)">
+            </div>
+            <div class="form-group"><label class="form-label">Back of Gift Card *</label>
+                <div class="gc-upload-box" id="gcBackBox" onclick="document.getElementById('gcBackInput').click()">
+                    <div class="gc-upload-placeholder" id="gcBackPreview"><i class="fas fa-image"></i><span>Tap to upload back</span></div>
+                </div>
+                <input type="file" id="gcBackInput" accept="image/*" style="display:none" onchange="App.handleGcBackUpload(event)">
+            </div>
+            <button class="btn btn-primary btn-block" onclick="App.submitGiftcard()"><i class="fas fa-paper-plane"></i> Submit Gift Card</button>
+        </div>
+        <!-- BTC -->
+        <div id="payPanelBtc" class="tab-panel">
+            <div style="text-align:center;padding:16px 0">
+                <div style="width:160px;height:160px;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);font-size:12px" id="btcQRBox">QR Code<br>Not Set</div>
+                <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;margin:12px 0;font-family:monospace;font-size:13px;word-break:break-all;color:var(--text)" id="btcAddressDisplay">Not configured</div>
+                <div class="form-group"><label class="form-label">Transaction ID</label><input type="text" class="input" id="btcTxid" placeholder="Paste Bitcoin TxID"></div>
+                <div class="form-group"><label class="form-label">Amount (BTC)</label><input type="text" class="input" id="btcAmount" placeholder="0.00045"></div>
+                <button class="btn btn-primary btn-block" onclick="App.submitCrypto('btc')"><i class="fab fa-bitcoin"></i> Confirm</button>
+            </div>
+        </div>
+        <!-- USDT -->
+        <div id="payPanelUsdt" class="tab-panel">
+            <div style="text-align:center;padding:16px 0">
+                <div style="width:160px;height:160px;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);font-size:12px" id="usdtQRBox">QR Code<br>Not Set</div>
+                <div style="margin-bottom:12px"><span style="background:rgba(0,175,240,0.1);color:var(--primary);padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700" id="usdtNetworkBadge">TRC20</span></div>
+                <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;margin:12px 0;font-family:monospace;font-size:13px;word-break:break-all;color:var(--text)" id="usdtAddressDisplay">Not configured</div>
+                <div class="form-group"><label class="form-label">Transaction Hash</label><input type="text" class="input" id="usdtTxHash" placeholder="Paste hash"></div>
+                <div class="form-group"><label class="form-label">Amount (USDT)</label><input type="text" class="input" id="usdtAmount" placeholder="50"></div>
+                <button class="btn btn-primary btn-block" onclick="App.submitCrypto('usdt')"><i class="fas fa-coins"></i> Confirm</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Post Viewer Modal -->
+<div class="modal-overlay" id="postViewerModal" onclick="if(event.target===this)App.closePostViewer()">
+    <div class="viewer-card" onclick="event.stopPropagation()">
+        <div class="viewer-header">
+            <div class="viewer-creator"><div class="viewer-avatar" id="pvAvatar" style="background-color:var(--border)"></div><div><div class="viewer-name" id="pvName"></div><div class="viewer-time" id="pvTime"></div></div></div>
+            <button class="modal-close" onclick="App.closePostViewer()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="viewer-media" id="pvMedia"></div>
+        <div class="viewer-caption" id="pvCaption"></div>
+        <div class="viewer-actions">
+            <button class="viewer-action" id="pvLikeBtn" onclick="App.likeCurrentPost()"><i class="far fa-heart"></i> <span id="pvLikes">0</span></button>
+            <button class="viewer-action"><i class="fas fa-comment"></i> <span id="pvComments">0</span></button>
+            <button class="viewer-action" onclick="App.shareCurrentPost()"><i class="fas fa-share"></i></button>
+        </div>
+    </div>
+</div>
+
+<!-- VIP Video Modal -->
+<div class="modal-overlay" id="vipVideoModal" onclick="if(event.target===this)App.closeVipVideo()">
+    <div class="viewer-card" onclick="event.stopPropagation()">
+        <div class="viewer-header">
+            <div class="viewer-creator"><div class="viewer-avatar" id="vipVvAvatar" style="background-color:var(--border)"></div><div><div class="viewer-name" id="vipVvName"></div><div class="viewer-time" id="vipVvTime"></div></div></div>
+            <button class="modal-close" onclick="App.closeVipVideo()"><i class="fas fa-times"></i></button>
+        </div>
+        <div id="vipVvMedia" style="width:100%;background:#000;display:flex;align-items:center;justify-content:center;min-height:200px"></div>
+        <div class="viewer-caption" id="vipVvCaption"></div>
+    </div>
+</div>
+
+<!-- Badge Apply Modal -->
+<div class="modal-overlay" id="badgeApplyModal" onclick="if(event.target===this)App.closeModal('badgeApplyModal')">
+    <div class="modal-card" style="max-width:520px;max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()">
+        <div class="modal-header"><h2><i class="fas fa-certificate" style="color:var(--blue)"></i> Apply for Verified Badge</h2><button class="modal-close" onclick="App.closeModal('badgeApplyModal')"><i class="fas fa-times"></i></button></div>
+        <!-- Price Display -->
+        <div style="text-align:center;padding:16px;background:linear-gradient(135deg,rgba(59,130,246,0.1),rgba(37,99,235,0.05));border-radius:12px;margin-bottom:16px">
+            <div style="font-size:13px;color:var(--text-secondary);margin-bottom:4px">Monthly Subscription Fee</div>
+            <div style="font-size:28px;font-weight:800;color:var(--blue)">$<span id="badgeApplyPriceUsd">8.00</span> <span style="font-size:16px;color:var(--text-secondary);font-weight:400">/ &#8358;<span id="badgeApplyPriceNgn">11,200</span></span></div>
+        </div>
+        <!-- Bank Transfer Details -->
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px">
+            <div style="font-weight:700;font-size:15px;margin-bottom:12px"><i class="fas fa-university"></i> Bank Transfer Details</div>
+            <div class="badge-detail-row"><span>Bank Name</span><span style="font-weight:600">PalmPay</span></div>
+            <div class="badge-detail-row"><span>Account Name</span><span style="font-weight:600">Palm Pay</span></div>
+            <div class="badge-detail-row"><span>Account Number</span><span style="font-weight:600;font-family:monospace">8061762411</span></div>
+        </div>
+        <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">After payment, fill in the details below and upload your receipt.</p>
+        <!-- Application Form -->
+        <div class="form-group"><label class="form-label">Full Name *</label><input type="text" class="input" id="badgeApplyFullName" placeholder="Your full name"></div>
+        <div class="form-group"><label class="form-label">Username *</label><input type="text" class="input" id="badgeApplyUsername" placeholder="Your username"></div>
+        <div class="form-group"><label class="form-label">Email *</label><input type="email" class="input" id="badgeApplyEmail" placeholder="your@email.com"></div>
+        <div class="form-group"><label class="form-label">Amount Paid *</label><input type="text" class="input" id="badgeApplyAmount" placeholder="e.g. $8.00 or N11200"></div>
+        <div class="form-group"><label class="form-label">Payment Reference *</label><input type="text" class="input" id="badgeApplyReference" placeholder="Transaction reference number"></div>
+        <div class="form-group"><label class="form-label">Date of Payment *</label><input type="date" class="input" id="badgeApplyDate"></div>
+        <div class="form-group">
+            <label class="form-label">Screenshot / Receipt *</label>
+            <div class="qr-upload-wrap" onclick="document.getElementById('badgeApplyScreenshot').click()">
+                <div class="qr-upload-preview" id="badgeApplyPreview"><i class="fas fa-receipt" style="font-size:28px;color:var(--text-secondary)"></i><span style="font-size:11px;color:var(--text-secondary);margin-top:4px">Tap to upload receipt</span></div>
+                <div class="qr-upload-overlay"><i class="fas fa-camera" style="font-size:16px"></i></div>
+            </div>
+            <input type="file" id="badgeApplyScreenshot" accept="image/*" style="display:none" onchange="App.handleBadgeScreenshotUpload(event)">
+        </div>
+        <div class="form-group"><label class="form-label">Note (Optional)</label><textarea class="textarea" id="badgeApplyNote" placeholder="Any additional info..."></textarea></div>
+        <button class="btn btn-primary btn-block" onclick="App.submitBadgeApplication()"><i class="fas fa-paper-plane"></i> Submit Application</button>
+    </div>
+</div>
+
+<!-- (Deposit/Withdraw modals removed - manual payments only) -->
+
+<!-- User Menu Modal -->
+<div class="modal-overlay" id="menuModal" onclick="if(event.target===this)App.closeModal('menuModal')">
+    <div class="modal-card" style="max-width:280px;padding:8px" onclick="event.stopPropagation()">
+        <div style="display:flex;flex-direction:column;gap:2px">
+            <button class="nav-btn" style="justify-content:flex-start;padding:12px;border-radius:8px;width:100%" onclick="App.closeModal('menuModal');App.go('user-profile')"><i class="fas fa-user"></i> My Profile</button>
+            <button class="nav-btn" style="justify-content:flex-start;padding:12px;border-radius:8px;width:100%" onclick="App.closeModal('menuModal');App.go('messages')"><i class="fas fa-comment"></i> Messages</button>
+            <button class="nav-btn" style="justify-content:flex-start;padding:12px;border-radius:8px;width:100%" onclick="App.goToCreatorStudio()"><i class="fas fa-video"></i> Creator Studio</button>
+            <div style="height:1px;background:var(--border);margin:4px 0"></div>
+            <button class="nav-btn" style="justify-content:flex-start;padding:12px;border-radius:8px;width:100%;color:var(--red)" onclick="App.logout()"><i class="fas fa-sign-out-alt"></i> Log Out</button>
+        </div>
+    </div>
+</div>
+
+<!-- Who Liked Modal -->
+<div class="modal-overlay" id="whoLikedModal" onclick="if(event.target===this)App.closeModal('whoLikedModal')">
+    <div class="modal-card" style="max-width:420px;max-height:80vh;overflow-y:auto" onclick="event.stopPropagation()">
+        <div class="modal-header"><h2><i class="fas fa-heart" style="color:var(--red)"></i> <span id="whoLikedTitle">Likes</span></h2><button class="modal-close" onclick="App.closeModal('whoLikedModal')"><i class="fas fa-times"></i></button></div>
+        <div class="scroll-list" id="whoLikedList" style="max-height:60vh"></div>
+    </div>
+</div>
+<!-- Share Modal -->
+<div class="modal-overlay" id="shareModal" onclick="if(event.target===this)App.closeModal('shareModal')">
+    <div class="modal-card" onclick="event.stopPropagation()">
+        <div class="modal-header"><h2><i class="fas fa-share-alt" style="color:var(--primary)"></i> Share</h2><button class="modal-close" onclick="App.closeModal('shareModal')"><i class="fas fa-times"></i></button></div>
+        <div style="text-align:center;margin-bottom:16px">
+            <div id="shareAvatar" style="width:60px;height:60px;border-radius:50%;background-size:cover;background-position:center;margin:0 auto 8px;background-color:var(--border);display:flex;align-items:center;justify-content:center;color:var(--text-secondary);font-size:24px"></div>
+            <div id="shareName" style="font-weight:700"></div>
+            <div id="shareUrl" style="font-size:13px;color:var(--primary);margin-top:4px;word-break:break-all"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
+            <button onclick="App.shareTo('whatsapp')" style="background:#25d366;color:#fff;border:none;border-radius:12px;padding:12px;font-size:12px;cursor:pointer"><i class="fab fa-whatsapp" style="font-size:20px"></i><br>WhatsApp</button>
+            <button onclick="App.shareTo('telegram')" style="background:#0088cc;color:#fff;border:none;border-radius:12px;padding:12px;font-size:12px;cursor:pointer"><i class="fab fa-telegram" style="font-size:20px"></i><br>Telegram</button>
+            <button onclick="App.shareTo('twitter')" style="background:var(--text);color:#fff;border:none;border-radius:12px;padding:12px;font-size:12px;cursor:pointer"><i class="fab fa-x-twitter" style="font-size:20px"></i><br>X</button>
+        </div>
+        <div style="display:flex;gap:8px"><button class="btn btn-outline btn-sm" style="flex:1" onclick="App.copyProfileLink()"><i class="fas fa-copy"></i> Copy</button><button class="btn btn-primary btn-sm" style="flex:1" onclick="App.nativeShare()"><i class="fas fa-share"></i> More</button></div>
+    </div>
+</div>
+
+<!-- VIP Unlock Modal -->
+<div class="modal-overlay" id="vipUnlockModal" onclick="if(event.target===this)App.closeModal('vipUnlockModal')">
+    <div class="modal-card" onclick="event.stopPropagation()">
+        <div style="text-align:center;padding:16px">
+            <div style="width:60px;height:60px;border-radius:50%;background:linear-gradient(135deg,var(--gold),#e67e00);display:flex;align-items:center;justify-content:center;margin:0 auto 12px"><i class="fas fa-crown" style="color:#fff;font-size:28px"></i></div>
+            <h2 style="font-size:20px;margin-bottom:8px">Unlock VIP Video</h2>
+            <p style="color:var(--text-secondary);font-size:14px;margin-bottom:8px" id="vipUnlockDesc"></p>
+            <div style="font-size:28px;font-weight:800;color:var(--gold);margin-bottom:16px" id="vipUnlockPrice"></div>
+            <button class="btn btn-gold btn-block" onclick="App.purchaseVip()"><i class="fas fa-unlock"></i> Unlock Now</button>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirm Modal -->
+<div class="modal-overlay" id="deleteModal" onclick="if(event.target===this)App.closeModal('deleteModal')">
+    <div class="modal-card" style="max-width:320px" onclick="event.stopPropagation()">
+        <h2 style="margin-bottom:8px">Delete Post?</h2>
+        <p style="color:var(--text-secondary);font-size:14px;margin-bottom:20px">This cannot be undone!</p>
+        <div style="display:flex;gap:12px"><button class="btn btn-outline" style="flex:1" onclick="App.closeModal('deleteModal')">Cancel</button><button class="btn btn-danger" style="flex:1" onclick="App.confirmDelete()">Delete</button></div>
+    </div>
+</div>
+
+<!-- ===================== BOTTOM NAV ===================== -->
+<nav class="bottom-nav" id="bottomNav" style="display:none">
+    <div class="bottom-nav-item active" onclick="App.go('feed')" data-nav="feed"><i class="fas fa-home"></i>Home</div>
+    <div class="bottom-nav-item" onclick="App.go('messages')" data-nav="messages"><i class="fas fa-comment-dots"></i>Messages</div>
+    <div class="bottom-nav-item" onclick="App.renderNotificationCenter()" data-nav="notifications"><i class="fas fa-bell"></i><span class="bottom-badge" id="bottomNotifBadge" style="display:none">0</span>Notifications</div>
+    <div class="bottom-nav-item" onclick="App.go('user-profile')" data-nav="user-profile"><i class="fas fa-user"></i>Profile</div>
+</nav>
+
+</body>
+</html>
