@@ -1516,10 +1516,10 @@ App.renderAdmin = async function() {
     if (aen) aen.value = p?.display_name || ''; if (aeb) aeb.value = p?.bio || ''; if (apm) apm.value = p?.monthly_price || 20; if (apw) apw.value = p?.weekly_price || 5; if (apv) apv.value = p?.vip_price || 50;
     // QR previews
     try { const settings = await DB.getPaymentSettings(Auth.getUid()); if (settings) { const btcQrPreview = document.getElementById('btcQrPreview'); const usdtQrPreview = document.getElementById('usdtQrPreview'); const btcQrUrl = settings?.btc_qr_url; const usdtQrUrl = settings?.usdt_qr_url; if (btcQrPreview && btcQrUrl) { btcQrPreview.style.backgroundImage = `url('${btcQrUrl}')`; btcQrPreview.innerHTML = ''; } if (usdtQrPreview && usdtQrUrl) { usdtQrPreview.style.backgroundImage = `url('${usdtQrUrl}')`; usdtQrPreview.innerHTML = ''; } const cba = document.getElementById('creatorBtcAddress'); const cbe = document.getElementById('creatorBtcEnabled'); const cua = document.getElementById('creatorUsdtAddress'); const cun = document.getElementById('creatorUsdtNetwork'); const cue = document.getElementById('creatorUsdtEnabled'); if (cba) cba.value = settings.btc_address || ''; if (cbe) cbe.checked = settings.btc_enabled || false; if (cua) cua.value = settings.usdt_address || ''; if (cun) cun.value = settings.usdt_network || 'TRC20'; if (cue) cue.checked = settings.usdt_enabled || false; } } catch (e) {}
-    // Posts
-    try { const posts = await DB.getPosts(Auth.getUid()); const mg = document.getElementById('managePostsGrid'); if (mg) mg.innerHTML = posts.length ? posts.map(p => `<div class="post-item manage-post-item" style="position:relative;overflow:hidden"><div style="width:100%;height:100%;background-image:url('${p.type === 'video' ? (p.thumbnail_url || p.media_url) : p.media_url}');background-size:cover;background-position:center"></div><div class="manage-post-overlay"><button class="btn btn-danger btn-sm" style="width:80%;font-size:13px" onclick="App.askDelete('${p.id}')"><i class="fas fa-trash-alt"></i> Delete</button><div style="color:#fff;font-size:11px;margin-top:4px;text-align:center">${p.type === 'video' ? '<i class="fas fa-video"></i> ' : ''}${this.esc(p.caption || '').substring(0, 20)}</div></div></div>`).join('') : '<div class="no-content"><i class="fas fa-image"></i>No posts</div>'; } catch (e) {}
-    // VIP
-    try { const vips = await DB.getVipVideos(Auth.getUid()); const vl = document.getElementById('adminVipList'); if (vl) vl.innerHTML = vips.length ? vips.map(v => `<div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)"><div style="width:80px;height:60px;border-radius:8px;background:#000;overflow:hidden;flex-shrink:0"><video preload="metadata" style="width:100%;height:100%;object-fit:cover" src="${v.video_url}"></video></div><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${this.esc(v.title)}</div><div style="font-size:13px;color:var(--text-secondary)">$${v.price}</div></div><button class="btn btn-danger btn-sm" onclick="App.delVip('${v.id}')">Delete</button></div>`).join('') : '<p class="no-content">No VIP videos yet</p>'; } catch (e) {}
+    // Posts with delete-btn class and data-id for event delegation
+    try { const posts = await DB.getPosts(Auth.getUid()); const mg = document.getElementById('managePostsGrid'); if (mg) { mg.innerHTML = posts.length ? posts.map(p => `<div class="post-item manage-post-item" style="position:relative;overflow:hidden"><div style="width:100%;height:100%;background-image:url('${p.type === 'video' ? (p.thumbnail_url || p.media_url) : p.media_url}');background-size:cover;background-position:center"></div><div class="manage-post-overlay"><button class="btn btn-danger btn-sm delete-btn" style="width:80%;font-size:13px" data-action="delete-post" data-id="${p.id}" onclick="App.askDelete('${p.id}')"><i class="fas fa-trash-alt"></i> Delete</button><div style="color:#fff;font-size:11px;margin-top:4px;text-align:center">${p.type === 'video' ? '<i class="fas fa-video"></i> ' : ''}${this.esc(p.caption || '').substring(0, 20)}</div></div></div>`).join('') : '<div class="no-content"><i class="fas fa-image"></i>No posts</div>'; this.attachDeleteListeners(mg); } } catch (e) {}
+    // VIP videos with delete-btn class and data-id
+    try { const vips = await DB.getVipVideos(Auth.getUid()); const vl = document.getElementById('adminVipList'); if (vl) { vl.innerHTML = vips.length ? vips.map(v => `<div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)"><div style="width:80px;height:60px;border-radius:8px;background:#000;overflow:hidden;flex-shrink:0"><video preload="metadata" style="width:100%;height:100%;object-fit:cover" src="${v.video_url}"></video></div><div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${this.esc(v.title)}</div><div style="font-size:13px;color:var(--text-secondary)">$${v.price}</div></div><button class="btn btn-danger btn-sm delete-btn" data-action="delete-vip" data-id="${v.id}" onclick="App.delVip('${v.id}')">Delete</button></div>`).join('') : '<p class="no-content">No VIP videos yet</p>'; this.attachDeleteListeners(vl); } } catch (e) {}
     this.renderSubs('all'); this.renderPayments('all'); this.renderAdminBadge(); this.setupPaymentRealtime(); this.setupBadgeRealtime(); this.renderCreatorLikeAnalytics(); this.loadSubscriptionPlans(); this.renderVipSubscribers();
 };
 
@@ -2042,44 +2042,70 @@ App.publishVip = async function() {
     } catch (e) { this.toast('Failed', 'error'); }
 };
 App.delVip = async function(id) {
+    console.log('[DELETE] delVip called with id:', id);
     if (!id) return;
     if (!confirm('Delete this VIP video permanently? This cannot be undone.')) return;
     try {
-        // Find the video to get the media URL for storage cleanup
         const videos = await DB.getVipVideos(Auth.getUid());
         const video = videos.find(v => v.id === id);
+        console.log('[DELETE] Deleting VIP video:', id);
         const success = await DB.deleteVipVideo(id);
+        console.log('[DELETE] deleteVipVideo result:', success);
         if (success) {
-            // Delete from storage if URL exists
-            if (video?.video_url) {
-                try { await Storage.deleteFile(video.video_url); } catch (s) {}
-            }
+            if (video?.video_url) { try { await Storage.deleteFile(video.video_url); } catch (s) {} }
             this.toast('VIP video deleted.', 'success');
             this.renderAdmin();
         } else {
-            this.toast('Delete failed. Please try again.', 'error');
+            this.toast('Delete failed.', 'error');
         }
-    } catch (e) { this.toast('Delete failed: ' + e.message, 'error'); }
+    } catch (e) { console.error('[DELETE] delVip error:', e.message); this.toast('Delete failed: ' + e.message, 'error'); }
 };
-App.askDelete = function(id) { this.postToDelete = id; this.openModal('deleteModal'); };
+App.askDelete = function(id) {
+    console.log('[DELETE] askDelete called with id:', id);
+    if (!id) { console.warn('[DELETE] No ID provided'); return; }
+    this.postToDelete = id;
+    this.openModal('deleteModal');
+};
+
+// Event delegation for delete buttons - more reliable on mobile than onclick
+// Handles: delete-post, delete-vip, remove-sub, delete-payment
+App.attachDeleteListeners = function(container) {
+    if (!container) return;
+    const handler = function(e) {
+        const btn = e.target.closest('.delete-btn');
+        if (!btn) return;
+        const action = btn.dataset.action;
+        console.log('[DELETE] Event delegation caught:', action, btn.dataset);
+        if (action === 'delete-post' && btn.dataset.id) { App.askDelete(btn.dataset.id); }
+        else if (action === 'delete-vip' && btn.dataset.id) { App.delVip(btn.dataset.id); }
+        else if (action === 'remove-sub' && btn.dataset.sub && btn.dataset.creator) { App.removeSubscriber(btn.dataset.sub, btn.dataset.creator); }
+    };
+    container.addEventListener('click', handler);
+    // Touch handler for mobile
+    container.addEventListener('touchend', function(e) {
+        const btn = e.target.closest('.delete-btn');
+        if (!btn) return;
+        e.preventDefault();
+        handler(e);
+    }, { passive: false });
+};
 App.confirmDelete = async function() {
-    if (!this.postToDelete) return;
+    console.log('[DELETE] confirmDelete called, postToDelete:', this.postToDelete);
+    if (!this.postToDelete) { console.warn('[DELETE] No postToDelete set'); return; }
     try {
-        // Get post media URL before deleting for storage cleanup
         const post = await DB.getPost(this.postToDelete);
+        console.log('[DELETE] Deleting post:', this.postToDelete);
         const success = await DB.deletePost(this.postToDelete);
+        console.log('[DELETE] deletePost result:', success);
         if (success) {
-            // Delete media from storage
-            if (post?.media_url) {
-                try { await Storage.deleteFile(post.media_url); } catch (s) {}
-            }
+            if (post?.media_url) { try { await Storage.deleteFile(post.media_url); } catch (s) {} }
             this.toast('Post deleted.', 'success');
             this.postToDelete = null;
             this.renderAdmin();
         } else {
-            this.toast('Delete failed. You can only delete your own posts.', 'error');
+            this.toast('Delete failed.', 'error');
         }
-    } catch (e) { this.toast('Delete failed: ' + e.message, 'error'); }
+    } catch (e) { console.error('[DELETE] Error:', e.message); this.toast('Delete failed: ' + e.message, 'error'); }
     this.closeModal('deleteModal');
 };
 
@@ -2118,7 +2144,10 @@ App.renderSubs = async function(status, btn) {
         });
         // Render
         const list = document.getElementById('subscribersList');
-        if (list) list.innerHTML = filtered.length ? filtered.map(s => this.subscriberCard(s)).join('') : '<p class="no-content">No subscribers found</p>';
+        if (list) {
+            list.innerHTML = filtered.length ? filtered.map(s => this.subscriberCard(s)).join('') : '<p class="no-content">No subscribers found</p>';
+            this.attachDeleteListeners(list);
+        }
     } catch (e) { console.error('[SUB] renderSubs:', e.message); }
 };
 
@@ -2150,7 +2179,7 @@ App.subscriberCard = function(s) {
     } else if (isPending) {
         actions = `<button class="btn btn-primary btn-sm" onclick="App.reactivateSubscription('${s.subscriber_id}', '${s.creator_id}')"><i class="fas fa-check"></i> Approve</button>`;
     }
-    actions += `<button class="btn btn-danger btn-sm" onclick="App.removeSubscriber('${s.subscriber_id}', '${s.creator_id}')"><i class="fas fa-trash-alt"></i> Remove</button>`;
+    actions += `<button class="btn btn-danger btn-sm delete-btn" data-action="remove-sub" data-sub="${s.subscriber_id}" data-creator="${s.creator_id}" onclick="App.removeSubscriber('${s.subscriber_id}', '${s.creator_id}')"><i class="fas fa-trash-alt"></i> Remove</button>`;
     return `<div class="sub-card"><div class="sub-header"><div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0">${avHtml}<div style="min-width:0"><div class="sub-name">${name}${verified}</div><div class="sub-meta">@${this.esc(sub.username || '')} &middot; ${s.plan_type} &middot; $${s.amount}</div></div></div>${statusBadge}</div><div class="sub-details"><div class="sub-detail-row"><span>Status</span><span style="font-weight:600">${s.status}${isExpired ? ' (Expired)' : ''}</span></div><div class="sub-detail-row"><span>Expires</span><span style="font-weight:600">${expiry}${isExpired ? ' (Expired)' : ''}</span></div><div class="sub-detail-row"><span>Since</span><span style="font-weight:600">${s.created_at ? new Date(s.created_at).toLocaleDateString() : 'N/A'}</span></div></div><div class="sub-actions">${actions}</div></div>`;
 };
 
@@ -2226,6 +2255,7 @@ App.renderPayments = async function(filter, btn) {
         const list = document.getElementById('paymentsList');
         if (!list) return;
         list.innerHTML = filtered.length ? filtered.map(p => this.paymentCard(p)).join('') : '<p class="no-content">No payment requests yet</p>';
+        this.attachDeleteListeners(list);
     } catch (e) { console.warn('[APP] Payments error:', e.message); }
 };
 App.filterPayments = function(filter, btn) { this.renderPayments(filter, btn); };
