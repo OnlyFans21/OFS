@@ -468,6 +468,21 @@ input, textarea, select { font-family: inherit; font-size: 15px; }
 .qr-upload-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; color: #fff; opacity: 0; transition: opacity 0.2s; }
 .qr-upload-wrap:hover .qr-upload-overlay { opacity: 1; }
 
+/* ===================== DELETE BUTTONS ===================== */
+/* Explicit delete button styles - ensure tap works on mobile */
+.delete-btn {
+    min-height: 36px;
+    min-width: 36px;
+    padding: 8px 16px;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    pointer-events: auto;
+    position: relative;
+    z-index: 3;
+}
+.delete-btn:active { transform: scale(0.95); }
+
 /* ===================== MANAGE POSTS (MOBILE-FRIENDLY DELETE) ===================== */
 .manage-post-item .manage-post-overlay {
     position: absolute;
@@ -481,16 +496,25 @@ input, textarea, select { font-family: inherit; font-size: 15px; }
     opacity: 0;
     transition: opacity 0.2s ease;
     padding: 8px;
+    pointer-events: none; /* CRITICAL: Don't capture clicks when invisible */
+    z-index: 2;
 }
 .manage-post-item:active .manage-post-overlay,
 .manage-post-item:hover .manage-post-overlay {
     opacity: 1;
+    pointer-events: auto; /* Enable clicks when visible */
 }
 /* Always show overlay on touch devices (no hover) */
 @media (hover: none) and (pointer: coarse) {
     .manage-post-item .manage-post-overlay {
         opacity: 1;
         background: rgba(0,0,0,0.35);
+        pointer-events: auto; /* Always clickable on touch */
+    }
+    .manage-post-item .manage-post-overlay .btn {
+        min-height: 36px; /* Larger tap target on mobile */
+        font-size: 14px;
+        padding: 8px 16px;
     }
 }
 
