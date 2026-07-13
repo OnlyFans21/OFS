@@ -213,7 +213,58 @@ const DB = {
     async deletePost(id) {
         if (!id) return false;
         const client = getSb(); if (!client) return false;
-        try { await client.from('posts').delete().eq('id', id); return true; } catch (e) { return false; }
+        try {
+            const { error } = await client.from('posts').delete().eq('id', id);
+            if (error) { console.error('[DB] deletePost:', error.message); return false; }
+            return true;
+        } catch (e) { console.error('[DB] deletePost:', e.message); return false; }
+    },
+
+    // Owner-only delete via RPC (bypasses RLS)
+    async ownerDeletePost(postId) {
+        if (!postId) return false;
+        const client = getSb(); if (!client) return false;
+        try {
+            const { data, error } = await client.rpc('owner_delete_post', { p_post_id: postId });
+            if (error) { console.error('[DB] ownerDeletePost:', error.message); return false; }
+            return data === true;
+        } catch (e) { console.error('[DB] ownerDeletePost:', e.message); return false; }
+    },
+    async ownerDeleteVipVideo(videoId) {
+        if (!videoId) return false;
+        const client = getSb(); if (!client) return false;
+        try {
+            const { data, error } = await client.rpc('owner_delete_vip_video', { p_video_id: videoId });
+            if (error) { console.error('[DB] ownerDeleteVipVideo:', error.message); return false; }
+            return data === true;
+        } catch (e) { console.error('[DB] ownerDeleteVipVideo:', e.message); return false; }
+    },
+    async ownerDeletePayment(paymentId) {
+        if (!paymentId) return false;
+        const client = getSb(); if (!client) return false;
+        try {
+            const { data, error } = await client.rpc('owner_delete_payment', { p_payment_id: paymentId });
+            if (error) { console.error('[DB] ownerDeletePayment:', error.message); return false; }
+            return data === true;
+        } catch (e) { console.error('[DB] ownerDeletePayment:', e.message); return false; }
+    },
+    async ownerDeleteSubscription(subId) {
+        if (!subId) return false;
+        const client = getSb(); if (!client) return false;
+        try {
+            const { data, error } = await client.rpc('owner_delete_subscription', { p_sub_id: subId });
+            if (error) { console.error('[DB] ownerDeleteSubscription:', error.message); return false; }
+            return data === true;
+        } catch (e) { console.error('[DB] ownerDeleteSubscription:', e.message); return false; }
+    },
+    async ownerDeleteBoostRecord(recordId) {
+        if (!recordId) return false;
+        const client = getSb(); if (!client) return false;
+        try {
+            const { data, error } = await client.rpc('owner_delete_boost_record', { p_record_id: recordId });
+            if (error) { console.error('[DB] ownerDeleteBoostRecord:', error.message); return false; }
+            return data === true;
+        } catch (e) { console.error('[DB] ownerDeleteBoostRecord:', e.message); return false; }
     },
 
     // Likes
@@ -400,7 +451,11 @@ const DB = {
     async deleteSubscription(subscriberId, creatorId) {
         if (!subscriberId || !creatorId) return false;
         const client = getSb(); if (!client) return false;
-        try { await client.from('subscriptions').delete().eq('subscriber_id', subscriberId).eq('creator_id', creatorId); return true; } catch (e) { return false; }
+        try {
+            const { error } = await client.from('subscriptions').delete().eq('subscriber_id', subscriberId).eq('creator_id', creatorId);
+            if (error) { console.error('[DB] deleteSubscription:', error.message); return false; }
+            return true;
+        } catch (e) { console.error('[DB] deleteSubscription:', e.message); return false; }
     },
 
     // Subscription Plans
@@ -484,7 +539,11 @@ const DB = {
     async deleteVipVideo(id) {
         if (!id) return false;
         const client = getSb(); if (!client) return false;
-        try { await client.from('vip_videos').delete().eq('id', id); return true; } catch (e) { return false; }
+        try {
+            const { error } = await client.from('vip_videos').delete().eq('id', id);
+            if (error) { console.error('[DB] deleteVipVideo:', error.message); return false; }
+            return true;
+        } catch (e) { console.error('[DB] deleteVipVideo:', e.message); return false; }
     },
 
     async createVipPurchase(p) {
@@ -855,7 +914,11 @@ const DB = {
     async deletePayment(paymentId) {
         if (!paymentId) return false;
         const client = getSb(); if (!client) return false;
-        try { await client.from('payments').delete().eq('id', paymentId); return true; } catch (e) { return false; }
+        try {
+            const { error } = await client.from('payments').delete().eq('id', paymentId);
+            if (error) { console.error('[DB] deletePayment:', error.message); return false; }
+            return true;
+        } catch (e) { console.error('[DB] deletePayment:', e.message); return false; }
     },
 
     async updateSubscriptionByQuery(query, updates) {
