@@ -2041,9 +2041,47 @@ App.publishVip = async function() {
         if (result?.id) { try { this.notifyNewVip(Auth.getUid(), result.id); } catch (n) {} }
     } catch (e) { this.toast('Failed', 'error'); }
 };
-App.delVip = async function(id) { if (!id || !confirm('Delete?')) return; try { await DB.deleteVipVideo(id); this.toast('Deleted', 'info'); this.renderAdmin(); } catch (e) {} };
+App.delVip = async function(id) {
+    if (!id) return;
+    if (!confirm('Delete this VIP video permanently? This cannot be undone.')) return;
+    try {
+        // Find the video to get the media URL for storage cleanup
+        const videos = await DB.getVipVideos(Auth.getUid());
+        const video = videos.find(v => v.id === id);
+        const success = await DB.deleteVipVideo(id);
+        if (success) {
+            // Delete from storage if URL exists
+            if (video?.video_url) {
+                try { await Storage.deleteFile(video.video_url); } catch (s) {}
+            }
+            this.toast('VIP video deleted.', 'success');
+            this.renderAdmin();
+        } else {
+            this.toast('Delete failed. Please try again.', 'error');
+        }
+    } catch (e) { this.toast('Delete failed: ' + e.message, 'error'); }
+};
 App.askDelete = function(id) { this.postToDelete = id; this.openModal('deleteModal'); };
-App.confirmDelete = async function() { if (!this.postToDelete) return; try { await DB.deletePost(this.postToDelete); this.toast('Deleted', 'info'); this.postToDelete = null; this.renderAdmin(); } catch (e) { this.toast('Failed', 'error'); } this.closeModal('deleteModal'); };
+App.confirmDelete = async function() {
+    if (!this.postToDelete) return;
+    try {
+        // Get post media URL before deleting for storage cleanup
+        const post = await DB.getPost(this.postToDelete);
+        const success = await DB.deletePost(this.postToDelete);
+        if (success) {
+            // Delete media from storage
+            if (post?.media_url) {
+                try { await Storage.deleteFile(post.media_url); } catch (s) {}
+            }
+            this.toast('Post deleted.', 'success');
+            this.postToDelete = null;
+            this.renderAdmin();
+        } else {
+            this.toast('Delete failed. You can only delete your own posts.', 'error');
+        }
+    } catch (e) { this.toast('Delete failed: ' + e.message, 'error'); }
+    this.closeModal('deleteModal');
+};
 
 // ===================== SUBSCRIBERS (with disable/enable) =====================
 App._allSubs = [];
@@ -2135,12 +2173,17 @@ App.disableSub = async function(subscriberId, creatorId, disable) {
 
 // Remove subscriber permanently
 App.removeSubscriber = async function(subscriberId, creatorId) {
-    if (!subscriberId || !creatorId || !confirm('Remove this subscriber permanently? They will lose all access.')) return;
+    if (!subscriberId || !creatorId) return;
+    if (!confirm('Remove this subscriber permanently? They will lose all access.')) return;
     try {
-        await DB.deleteSubscription(subscriberId, creatorId);
-        this.toast('Subscriber removed', 'info');
-        this.renderSubs('all');
-    } catch (e) { this.toast('Failed: ' + (e.message || ''), 'error'); }
+        const success = await DB.deleteSubscription(subscriberId, creatorId);
+        if (success) {
+            this.toast('Subscriber removed.', 'success');
+            this.renderSubs('all');
+        } else {
+            this.toast('Remove failed.', 'error');
+        }
+    } catch (e) { this.toast('Remove failed: ' + e.message, 'error'); }
 };
 
 // Cancel subscription (mark as cancelled)
@@ -2304,10 +2347,14 @@ App.rejectPayment = async function(paymentId) {
 App.deletePayment = async function(paymentId) {
     if (!paymentId || !confirm('Delete this payment record permanently?')) return;
     try {
-        await DB.deletePayment(paymentId);
-        this.toast('Payment deleted.', 'info');
-        this.renderPayments('all');
-    } catch (e) { this.toast('Failed: ' + (e.message || ''), 'error'); }
+        const success = await DB.deletePayment(paymentId);
+        if (success) {
+            this.toast('Payment deleted.', 'success');
+            this.renderPayments('all');
+        } else {
+            this.toast('Delete failed.', 'error');
+        }
+    } catch (e) { this.toast('Delete failed: ' + (e.message || ''), 'error'); }
 };
 
 App.filterAdminMessages = function() {};
@@ -2320,7 +2367,15 @@ App.renderOwner = async function() { try { const stats = await DB.getOwnerStats(
 App.ownerUserCard = function(u) { const avatar = u.avatar ? `style="background-image:url('${u.avatar}')"` : ''; const initial = u.avatar ? '' : (u.display_name || u.username).charAt(0).toUpperCase(); const joined = u.created_at ? new Date(u.created_at).toLocaleDateString() : 'Unknown'; return `<div class="owner-user-card"><div class="owner-avatar" ${avatar}>${initial}</div><div class="owner-info"><div class="owner-name">@${this.esc(u.display_name || u.username)}</div><div class="owner-email">${this.esc(u.email || 'No email')}</div><div class="owner-meta">Balance: $${parseFloat(u.balance || 0).toFixed(2)} &middot; Joined: ${joined}</div></div><div class="owner-actions"><span class="status-badge status-active">ACTIVE</span><button class="btn btn-danger btn-sm" onclick="App.ownerDeleteUser('${u.id}', '${this.esc(u.username)}')"><i class="fas fa-trash-alt"></i></button></div></div>`; };
 App.ownerCreatorCard = function(c) { const avatar = c.avatar ? `style="background-image:url('${c.avatar}')"` : ''; const initial = c.avatar ? '' : (c.display_name || c.username).charAt(0).toUpperCase(); return `<div class="owner-user-card"><div class="owner-avatar" ${avatar}>${initial}</div><div class="owner-info"><div class="owner-name">${this.esc(c.display_name || c.username)}${c.verified ? ' <i class="fas fa-check-circle verified-badge"></i>' : ''}</div><div class="owner-email">@${c.username}</div><div class="owner-meta">$${c.monthly_price}/mo &middot; ${c.subscribers_count} subs &middot; ${c.posts_count} posts</div></div></div>`; };
 App.ownerPostCard = function(p) { return `<div class="owner-user-card"><div class="owner-avatar" style="background-image:url('${p.media_url}');border-radius:8px;width:48px;height:48px"></div><div class="owner-info"><div class="owner-name">${this.esc(p.caption || 'No caption')}</div><div class="owner-email">by ${this.esc(p.creator?.display_name || 'Unknown')}</div><div class="owner-meta">${p.type} &middot; ${p.likes_count || 0} likes &middot; ${this.timeAgo(p.created_at)}</div></div></div>`; };
-App.ownerDeleteUser = async function(userId, username) { if (!confirm(`Delete @${username}?`)) return; try { await DB.deleteUser(userId); this.toast('Deleted', 'info'); this.renderOwner(); } catch (e) { this.toast('Failed', 'error'); } };
+App.ownerDeleteUser = async function(userId, username) {
+    if (!userId) return;
+    if (!confirm(`WARNING: Permanently delete @${username}? This cannot be undone.`)) return;
+    try {
+        const success = await DB.deleteUser(userId);
+        if (success) { this.toast('User deleted.', 'success'); this.renderOwner(); }
+        else this.toast('Delete failed.', 'error');
+    } catch (e) { this.toast('Delete failed: ' + e.message, 'error'); }
+};
 App._ownerSubs = []; App.renderOwnerSubs = async function(status, btn) { if (btn) { document.querySelectorAll('#ownerTab-subs .filter-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); } try { const subs = await DB.getAllSubscriptions(); this._ownerSubs = subs; const filtered = status === 'all' ? subs : subs.filter(s => s.status === status); const list = document.getElementById('ownerSubsList'); if (!list) return; list.innerHTML = filtered.length ? filtered.map(s => { const subName = this.esc(s.subscriber?.display_name || s.subscriber?.username || 'Unknown'); const crName = this.esc(s.creator?.display_name || s.creator?.username || 'Unknown'); const started = s.created_at ? new Date(s.created_at).toLocaleString() : 'Unknown'; const statusClass = s.status === 'approved' ? 'status-active' : s.status === 'pending' ? 'status-pending' : 'status-rejected'; return `<div class="owner-sub-card"><div class="sub-header"><div class="sub-users">@${subName} &rarr; @${crName}</div><span class="status-badge ${statusClass}">${s.status}</span></div><div class="sub-details">Plan: ${s.plan_type} &middot; $${parseFloat(s.amount || 0).toFixed(2)} &middot; ${started}</div></div>`; }).join('') : '<p class="no-content">No subscriptions yet</p>'; } catch (e) {} };
 App.filterOwnerSubs = function(status, btn) { this.renderOwnerSubs(status, btn); };
 // ===================== OWNER TRANSACTIONS MANAGEMENT =====================
