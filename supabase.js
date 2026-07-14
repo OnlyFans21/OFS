@@ -1085,10 +1085,33 @@ const DB = {
         } catch (e) { console.error('[DB] getUsersStatus:', e.message); return {}; }
     },
 
+    // Permanently delete a user and ALL their data (RPC with SECURITY DEFINER)
     async deleteUser(userId) {
-        if (!userId) return false;
-        const client = getSb(); if (!client) return false;
-        try { await client.from('profiles').delete().eq('id', userId); return true; } catch (e) { return false; }
+        if (!userId) return { success: false, message: 'No user ID provided' };
+        const client = getSb(); if (!client) return { success: false, message: 'Supabase not initialized' };
+        try {
+            const { data, error } = await client.rpc('permanently_delete_user', { p_user_id: userId });
+            if (error) {
+                console.error('[DB] permanently_delete_user RPC error:', error.message);
+                return { success: false, message: 'Delete failed: ' + error.message };
+            }
+            // data is a JSONB object returned by the function
+            return data || { success: false, message: 'No response from server' };
+        } catch (e) {
+            console.error('[DB] deleteUser:', e.message);
+            return { success: false, message: 'Exception: ' + e.message };
+        }
+    },
+
+    // Preview what would be deleted (for confirmation dialog)
+    async previewUserDeletion(userId) {
+        if (!userId) return null;
+        const client = getSb(); if (!client) return null;
+        try {
+            const { data, error } = await client.rpc('preview_user_deletion', { p_user_id: userId });
+            if (error) { console.warn('[DB] previewUserDeletion:', error.message); return null; }
+            return data;
+        } catch (e) { console.warn('[DB] previewUserDeletion:', e.message); return null; }
     },
 
     // Realtime
@@ -1219,7 +1242,8 @@ const DB = {
                 p_title: notification.title || '',
                 p_body: notification.body || '',
                 p_related_id: notification.related_id || '',
-                p_related_type: notification.related_type || ''
+                p_related_type: notification.related_type || '',
+                p_sender_id: notification.sender_id || null
             });
             if (error) {
                 console.error('[DB] createNotification RPC ERROR:', error.message);
@@ -1227,6 +1251,43 @@ const DB = {
             }
             return data ? { id: data } : null;
         } catch (e) { console.error('[DB] createNotification:', e.message); return null; }
+    },
+
+    // Broadcast a notification to ALL users (e.g., new user joined, owner announcement)
+    async broadcastNotification(notification) {
+        if (!notification?.title) return 0;
+        const client = getSb(); if (!client) return 0;
+        try {
+            const { data, error } = await client.rpc('broadcast_notification', {
+                p_type: notification.type || 'general',
+                p_title: notification.title || '',
+                p_body: notification.body || '',
+                p_related_id: notification.related_id || '',
+                p_related_type: notification.related_type || '',
+                p_sender_id: notification.sender_id || null,
+                p_exclude_user_id: notification.exclude_user_id || null
+            });
+            if (error) { console.error('[DB] broadcastNotification:', error.message); return 0; }
+            return data || 0;
+        } catch (e) { console.error('[DB] broadcastNotification:', e.message); return 0; }
+    },
+
+    // Notify all subscribers of a creator
+    async notifyCreatorSubscribers(creatorId, notification) {
+        if (!creatorId || !notification?.title) return 0;
+        const client = getSb(); if (!client) return 0;
+        try {
+            const { data, error } = await client.rpc('notify_creator_subscribers', {
+                p_creator_id: creatorId,
+                p_type: notification.type || 'post',
+                p_title: notification.title || '',
+                p_body: notification.body || '',
+                p_related_id: notification.related_id || '',
+                p_related_type: notification.related_type || ''
+            });
+            if (error) { console.error('[DB] notifyCreatorSubscribers:', error.message); return 0; }
+            return data || 0;
+        } catch (e) { console.error('[DB] notifyCreatorSubscribers:', e.message); return 0; }
     },
 
     async getNotifs(userId, limit) {
