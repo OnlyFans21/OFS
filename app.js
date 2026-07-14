@@ -424,10 +424,6 @@ App.togglePostLike = async function(postId) {
             if (countEl) countEl.textContent = total;
             // Refresh creator profile likes if viewing a profile
             this.refreshProfileLikes();
-            // Send like notification to post creator (only when liking, not unliking)
-            if (!wasLiked && post?.creator_id && post.creator_id !== uid) {
-                try { this.notifyNewLike(postId, uid, post.creator_id); } catch (n) {}
-            }
         } else {
             // Revert on failure
             if (btn) { const icon = btn.querySelector('i'); if (icon) icon.className = wasLiked ? 'fas fa-heart' : 'far fa-heart'; if (wasLiked) btn.classList.add('liked'); else btn.classList.remove('liked'); }
@@ -1168,22 +1164,11 @@ App.initNotifRealtime = function() {
     try {
         if (this._notifRealtime) { try { this._notifRealtime.unsubscribe(); } catch (e) {} this._notifRealtime = null; }
         this._notifRealtime = DB.subscribeToNotifs(uid, (payload) => {
-            console.log('[NOTIF] New notification received', payload);
-            // Refresh UI
+            console.log('[NOTIF] New notification received');
             this.renderNotifications();
             this.updateNotifBadge();
-            // Show toast for the new notification
-            try {
-                const newNotif = payload.new;
-                if (newNotif && !newNotif.is_read) {
-                    const shortTitle = newNotif.title && newNotif.title.length > 50
-                        ? newNotif.title.substring(0, 50) + '...'
-                        : (newNotif.title || 'New notification');
-                    this.toast(shortTitle, 'info', 4000);
-                }
-            } catch (t) {}
-            // Vibrate on mobile
-            if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
+            // Play subtle sound or vibrate
+            if (navigator.vibrate) navigator.vibrate(50);
         });
     } catch (e) { console.error('[NOTIF] Realtime init failed:', e.message); }
 };
@@ -1237,153 +1222,37 @@ App.renderNotificationCenter = async function() {
     } catch (e) { console.error('[NOTIF] center render:', e.message); }
 };
 
-// ============================================================
-// COMPLETE NOTIFICATION ICON & COLOR MAPS
-// Supports all notification types across the platform
-// ============================================================
-App._notifIcons = {
-    welcome: 'fa-hand-sparkles',
-    new_fan: 'fa-user-plus',
-    new_creator: 'fa-user-plus',
-    new_post: 'fa-image',
-    new_image: 'fa-camera',
-    new_video: 'fa-video',
-    new_vip_video: 'fa-crown',
-    new_gallery: 'fa-images',
-    new_subscription: 'fa-credit-card',
-    new_like: 'fa-heart',
-    new_comment: 'fa-comment',
-    new_message: 'fa-comment-dots',
-    verification_approved: 'fa-check-circle',
-    verification_declined: 'fa-times-circle',
-    payment_received: 'fa-money-bill-wave',
-    payment_approved: 'fa-check-circle',
-    payment_declined: 'fa-times-circle',
-    withdrawal_approved: 'fa-check-circle',
-    withdrawal_declined: 'fa-times-circle',
-    owner_announcement: 'fa-bullhorn',
-    subscription_expiry: 'fa-clock',
-    vip_expiry: 'fa-crown',
-    tip: 'fa-gift',
-    follow: 'fa-user-plus',
-    post: 'fa-image',
-    vip: 'fa-crown',
-    message: 'fa-comment-dots',
-    subscription: 'fa-credit-card',
-    like: 'fa-heart',
-    comment: 'fa-comment',
-    system: 'fa-info-circle',
-    general: 'fa-bell'
-};
-
-App._notifColors = {
-    welcome: 'var(--primary)',
-    new_fan: 'var(--green)',
-    new_creator: 'var(--purple)',
-    new_post: 'var(--green)',
-    new_image: 'var(--blue)',
-    new_video: 'var(--red)',
-    new_vip_video: 'var(--gold)',
-    new_gallery: 'var(--green)',
-    new_subscription: 'var(--purple)',
-    new_like: 'var(--red)',
-    new_comment: 'var(--blue)',
-    new_message: 'var(--blue)',
-    verification_approved: 'var(--green)',
-    verification_declined: 'var(--red)',
-    payment_received: 'var(--green)',
-    payment_approved: 'var(--green)',
-    payment_declined: 'var(--red)',
-    withdrawal_approved: 'var(--green)',
-    withdrawal_declined: 'var(--red)',
-    owner_announcement: 'var(--orange)',
-    subscription_expiry: 'var(--orange)',
-    vip_expiry: 'var(--gold)',
-    tip: 'var(--pink)',
-    follow: 'var(--green)',
-    post: 'var(--green)',
-    vip: 'var(--gold)',
-    message: 'var(--blue)',
-    subscription: 'var(--purple)',
-    like: 'var(--red)',
-    comment: 'var(--blue)',
-    system: 'var(--text-secondary)',
-    general: 'var(--text-secondary)'
-};
-
 // Notification item HTML for profile page
 App.notifItemHtml = function(n) {
-    const icon = this._notifIcons[n.type] || this._notifIcons.general;
-    const color = this._notifColors[n.type] || this._notifColors.general;
+    const icons = { welcome: 'fa-hand-sparkles', post: 'fa-image', vip: 'fa-crown', payment_received: 'fa-money-bill-wave', payment_approved: 'fa-check-circle', payment_declined: 'fa-times-circle', message: 'fa-comment-dots', subscription: 'fa-credit-card', subscription_expiry: 'fa-clock', vip_expiry: 'fa-crown', like: 'fa-heart', general: 'fa-bell' };
+    const icon = icons[n.type] || icons.general;
+    const colors = { welcome: 'var(--primary)', post: 'var(--green)', vip: 'var(--gold)', payment_received: 'var(--green)', payment_approved: 'var(--green)', payment_declined: 'var(--red)', message: 'var(--blue)', subscription: 'var(--purple)', subscription_expiry: 'var(--orange)', vip_expiry: 'var(--gold)', like: 'var(--red)', general: 'var(--text-secondary)' };
+    const color = colors[n.type] || colors.general;
     const time = this.timeAgo(n.created_at);
     return `<div class="notif-item ${n.is_read ? 'read' : 'unread'}" onclick="App.handleNotifClick('${n.id}', '${n.type}', '${n.related_id || ''}', '${n.related_type || ''}')" data-notif-id="${n.id}"><div class="notif-icon" style="background:${color}15;color:${color}"><i class="fas ${icon}"></i></div><div class="notif-content"><div class="notif-title">${this.esc(n.title)}</div><div class="notif-body">${this.esc(n.body || '')}</div><div class="notif-time">${time}</div></div>${!n.is_read ? '<div class="notif-dot"></div>' : ''}</div>`;
 };
 
 // Notification center item HTML
 App.notifCenterItemHtml = function(n) {
-    const icon = this._notifIcons[n.type] || this._notifIcons.general;
-    const color = this._notifColors[n.type] || this._notifColors.general;
+    const icons = { welcome: 'fa-hand-sparkles', post: 'fa-image', vip: 'fa-crown', payment_received: 'fa-money-bill-wave', payment_approved: 'fa-check-circle', payment_declined: 'fa-times-circle', message: 'fa-comment-dots', subscription: 'fa-credit-card', subscription_expiry: 'fa-clock', vip_expiry: 'var(--gold)', like: 'fa-heart', general: 'fa-bell' };
+    const icon = icons[n.type] || icons.general;
+    const colors = { welcome: 'var(--primary)', post: 'var(--green)', vip: 'var(--gold)', payment_received: 'var(--green)', payment_approved: 'var(--green)', payment_declined: 'var(--red)', message: 'var(--blue)', subscription: 'var(--purple)', subscription_expiry: 'var(--orange)', vip_expiry: 'var(--gold)', like: 'var(--red)', general: 'var(--text-secondary)' };
+    const color = colors[n.type] || colors.general;
     const time = this.timeAgo(n.created_at);
     return `<div class="notif-center-item ${n.is_read ? 'read' : 'unread'}" data-notif-id="${n.id}"><div class="notif-center-icon" style="background:${color}15;color:${color}"><i class="fas ${icon}"></i></div><div class="notif-center-content" onclick="App.handleNotifClick('${n.id}', '${n.type}', '${n.related_id || ''}', '${n.related_type || ''}')"><div class="notif-center-title">${this.esc(n.title)}</div><div class="notif-center-body">${this.esc(n.body || '')}</div><div class="notif-center-time">${time}</div></div><div class="notif-center-actions"><button class="notif-action-btn" onclick="event.stopPropagation();App.markNotifRead('${n.id}')" title="Mark as read"><i class="fas ${n.is_read ? 'fa-check' : 'fa-check-circle'}"></i></button><button class="notif-action-btn" onclick="event.stopPropagation();App.deleteNotif('${n.id}')" title="Delete"><i class="fas fa-trash-alt"></i></button></div></div>`;
 };
 
-// Handle notification click - navigate to the correct page based on type
+// Handle notification click - navigate to relevant page
 App.handleNotifClick = async function(id, type, relatedId, relatedType) {
     await DB.markNotifRead(id);
     this.renderNotifications();
     this.updateNotifBadge();
-
-    // New user joined / new creator joined -> open their profile
-    if ((type === 'new_fan' || type === 'new_creator') && relatedId) {
-        this.creatorId = relatedId;
-        this.go('creator-profile');
-        return;
-    }
-    // New post / new image / new video / new gallery / like / comment -> open the post
-    if ((type === 'new_post' || type === 'new_image' || type === 'new_video' || type === 'new_gallery' || type === 'post' || type === 'new_like' || type === 'new_comment') && relatedId) {
-        this.openPost(relatedId);
-        return;
-    }
-    // VIP content -> open VIP video
-    if ((type === 'new_vip_video' || type === 'vip') && relatedId) {
-        this.openVipVideo(relatedId);
-        return;
-    }
-    // Message -> open messages
-    if (type === 'new_message' || type === 'message') {
-        this.go('messages');
-        return;
-    }
-    // Subscription related -> user profile
-    if (type === 'new_subscription' || type === 'subscription' || type === 'subscription_expiry') {
-        this.go('user-profile');
-        return;
-    }
-    // Payment related -> user profile
-    if (type === 'payment_approved' || type === 'payment_declined' || type === 'payment_received' || type === 'withdrawal_approved' || type === 'withdrawal_declined') {
-        this.go('user-profile');
-        return;
-    }
-    // VIP expiry -> user profile
-    if (type === 'vip_expiry') {
-        this.go('user-profile');
-        return;
-    }
-    // Verification -> user profile
-    if (type === 'verification_approved' || type === 'verification_declined') {
-        this.go('user-profile');
-        return;
-    }
-    // Owner announcement -> feed (or could be a special announcements page)
-    if (type === 'owner_announcement') {
-        this.go('feed');
-        return;
-    }
-    // Welcome -> feed
-    if (type === 'welcome') {
-        this.go('feed');
-        return;
-    }
+    if (type === 'post' && relatedId) { this.openPost(relatedId); return; }
+    if (type === 'vip' && relatedId) { this.openVipVideo(relatedId); return; }
+    if (type === 'message') { this.go('messages'); return; }
+    if (type === 'payment_approved' || type === 'payment_declined') { this.go('user-profile'); return; }
+    if (type === 'subscription' || type === 'subscription_expiry') { this.go('user-profile'); return; }
+    if (type === 'vip_expiry') { this.go('user-profile'); return; }
 };
 
 App.markNotifRead = async function(id) {
@@ -1412,136 +1281,47 @@ App.deleteNotif = async function(id) {
     } catch (e) {}
 };
 
-// ============================================================
-// NOTIFICATION HELPERS - Send notifications for platform events
-// ============================================================
-
-// Core send helper
-App.sendNotification = async function(userId, type, title, body, relatedId, relatedType, senderId) {
+// Send notification helper
+App.sendNotification = async function(userId, type, title, body, relatedId, relatedType) {
     if (!userId) return;
     try {
-        await DB.createNotification({
-            user_id: userId, type, title, body,
-            related_id: relatedId || '',
-            related_type: relatedType || '',
-            sender_id: senderId || null
-        });
+        await DB.createNotification({ user_id: userId, type, title, body, related_id: relatedId || '', related_type: relatedType || '' });
     } catch (e) { console.error('[NOTIF] send:', e.message); }
 };
 
-// FEATURE 1: New user joined - broadcast to ALL existing users
-// (This is also handled by the database trigger, but client-side
-//  broadcast is kept as a fallback for edge cases)
-App.notifyNewUserJoined = async function(userId, displayName) {
-    if (!userId || !displayName) return;
-    try {
-        await DB.broadcastNotification({
-            type: 'new_fan',
-            title: displayName + ' has joined OnlyFans.',
-            body: 'A new user just joined the platform. Welcome them!',
-            related_id: userId,
-            related_type: 'profile',
-            sender_id: userId,
-            exclude_user_id: userId
-        });
-    } catch (e) { console.error('[NOTIF] newUserJoined:', e.message); }
-};
-
-// FEATURE 1b: New creator joined - broadcast to ALL users
-App.notifyNewCreatorJoined = async function(creatorId, displayName) {
-    if (!creatorId || !displayName) return;
-    try {
-        await DB.broadcastNotification({
-            type: 'new_creator',
-            title: displayName + ' has joined OnlyFans as a creator!',
-            body: 'A new creator just joined. Check out their content!',
-            related_id: creatorId,
-            related_type: 'profile',
-            sender_id: creatorId,
-            exclude_user_id: creatorId
-        });
-    } catch (e) { console.error('[NOTIF] newCreatorJoined:', e.message); }
-};
-
-// FEATURE 2: Creator published new post - notify subscribers
-// (Also handled by database trigger; JS version is fallback)
+// Trigger notifications for various events
 App.notifyNewPost = async function(creatorId, postId) {
     if (!creatorId || !postId) return;
     try {
+        // Get all subscribers
+        const subs = await DB.getCreatorSubs(creatorId);
         const creator = await DB.getProfile(creatorId);
         const creatorName = creator?.display_name || creator?.username || 'A creator';
-        const count = await DB.notifyCreatorSubscribers(creatorId, {
-            type: 'new_post',
-            title: '@' + creatorName + ' posted new content.',
-            body: creatorName + ' has shared new exclusive content. Check it out!',
-            related_id: postId,
-            related_type: 'post'
-        });
-        console.log('[NOTIF] notifyNewPost: sent to', count, 'subscribers');
+        for (const sub of subs) {
+            if (sub.subscriber_id && sub.status === 'approved') {
+                await this.sendNotification(sub.subscriber_id, 'post', `${this.esc(creatorName)} posted new content`, `${this.esc(creatorName)} has shared new exclusive content. Check it out!`, postId, 'post');
+            }
+        }
     } catch (e) { console.error('[NOTIF] newPost:', e.message); }
 };
 
-// FEATURE 3: Creator published VIP content - notify subscribers
 App.notifyNewVip = async function(creatorId, videoId) {
     if (!creatorId || !videoId) return;
     try {
+        const subs = await DB.getCreatorSubs(creatorId);
         const creator = await DB.getProfile(creatorId);
         const creatorName = creator?.display_name || creator?.username || 'A creator';
-        const count = await DB.notifyCreatorSubscribers(creatorId, {
-            type: 'new_vip_video',
-            title: '@' + creatorName + ' uploaded new exclusive content.',
-            body: 'New VIP content is available from ' + creatorName + '. Unlock it now!',
-            related_id: videoId,
-            related_type: 'vip_video'
-        });
-        console.log('[NOTIF] notifyNewVip: sent to', count, 'subscribers');
-    } catch (e) { /* notification error ignored */ }
+        for (const sub of subs) {
+            if (sub.subscriber_id && sub.status === 'approved') {
+                await this.sendNotification(sub.subscriber_id, 'vip', `${this.esc(creatorName)} uploaded a VIP video`, `New VIP content is available from ${this.esc(creatorName)}. Unlock it now!`, videoId, 'vip_video');
+            }
+        }
+    } catch (e) { console.error('[NOTIF] newVip:', e.message); }
 };
 
-// FEATURE 5: New like on post - notify post creator (also handled by trigger)
-App.notifyNewLike = async function(postId, likerId, creatorId) {
-    if (!postId || !likerId || !creatorId || likerId === creatorId) return;
-    try {
-        const liker = await DB.getProfile(likerId);
-        const likerName = liker?.display_name || liker?.username || 'Someone';
-        await this.sendNotification(creatorId, 'new_like', likerName + ' liked your post.', likerName + ' liked your content.', postId, 'post', likerId);
-    } catch (e) { console.error('[NOTIF] newLike:', e.message); }
-};
-
-// FEATURE 6: New comment on post - notify post creator
-App.notifyNewComment = async function(postId, commenterId, creatorId, commentText) {
-    if (!postId || !commenterId || !creatorId || commenterId === creatorId) return;
-    try {
-        const commenter = await DB.getProfile(commenterId);
-        const name = commenter?.display_name || commenter?.username || 'Someone';
-        await this.sendNotification(creatorId, 'new_comment', name + ' commented on your post.', '"' + (commentText || '').substring(0, 60) + '"', postId, 'post', commenterId);
-    } catch (e) { console.error('[NOTIF] newComment:', e.message); }
-};
-
-// FEATURE 7: New subscription - notify creator (also handled by trigger)
-App.notifyNewSubscription = async function(subscriberId, creatorId, planType, amount) {
-    if (!subscriberId || !creatorId) return;
-    try {
-        const subscriber = await DB.getProfile(subscriberId);
-        const name = subscriber?.display_name || subscriber?.username || 'Someone';
-        await this.sendNotification(creatorId, 'new_subscription', name + ' subscribed to your ' + (planType || 'monthly') + ' plan!', 'You have a new subscriber! They paid $' + parseFloat(amount || 0).toFixed(2), subscriberId, 'profile', subscriberId);
-    } catch (e) { console.error('[NOTIF] newSubscription:', e.message); }
-};
-
-// FEATURE 8: New message - notify recipient
-App.notifyNewMessage = async function(roomId, senderId, recipientId, content) {
-    if (!recipientId || senderId === recipientId) return;
-    try {
-        const sender = await DB.getProfile(senderId);
-        const senderName = sender?.display_name || sender?.username || 'Someone';
-        await this.sendNotification(recipientId, 'new_message', 'New message from ' + senderName, (content || '').substring(0, 80), roomId, 'chat_room', senderId);
-    } catch (e) { console.error('[NOTIF] newMessage:', e.message); }
-};
-
-// Payment notifications
 App.notifyPaymentReceived = async function(creatorId, paymentId, amount, method) {
     if (!creatorId) return;
-    await this.sendNotification(creatorId, 'payment_received', 'New Payment Request', 'You received a new $' + parseFloat(amount || 0).toFixed(2) + ' payment request via ' + (method || 'unknown') + '.', paymentId, 'payment');
+    await this.sendNotification(creatorId, 'payment_received', 'New Payment Request', `You received a new $${parseFloat(amount || 0).toFixed(2)} payment request via ${method || 'unknown'}.`, paymentId, 'payment');
 };
 
 App.notifyPaymentApproved = async function(userId, paymentId) {
@@ -1554,31 +1334,16 @@ App.notifyPaymentDeclined = async function(userId, paymentId) {
     await this.sendNotification(userId, 'payment_declined', 'Payment Declined', 'Your payment was declined. Please contact support for assistance.', paymentId, 'payment');
 };
 
-// Verification approved notification
-App.notifyVerificationApproved = async function(creatorId) {
-    if (!creatorId) return;
-    await this.sendNotification(creatorId, 'verification_approved', 'You are now verified!', 'Your blue verified badge has been approved. It is now visible on your profile.', '', '');
+App.notifyNewMessage = async function(roomId, senderId, recipientId, content) {
+    if (!recipientId || senderId === recipientId) return;
+    const sender = await DB.getProfile(senderId);
+    const senderName = sender?.display_name || sender?.username || 'Someone';
+    await this.sendNotification(recipientId, 'message', `New message from ${this.esc(senderName)}`, content || 'You have a new message.', roomId, 'chat_room');
 };
 
-// Owner announcement - broadcast to ALL users
-App.notifyOwnerAnnouncement = async function(title, body) {
-    if (!title) return;
-    try {
-        const count = await DB.broadcastNotification({
-            type: 'owner_announcement',
-            title: title,
-            body: body || '',
-            related_id: '',
-            related_type: ''
-        });
-        console.log('[NOTIF] Owner announcement sent to', count, 'users');
-    } catch (e) { console.error('[NOTIF] ownerAnnouncement:', e.message); }
-};
-
-// Subscription expiry notifications
 App.notifySubscriptionExpiring = async function(userId, subscriptionId, hoursLeft) {
     if (!userId) return;
-    await this.sendNotification(userId, 'subscription_expiry', 'Subscription Expiring Soon', 'Your subscription expires in ' + hoursLeft + ' hours. Renew now to keep access!', subscriptionId, 'subscription');
+    await this.sendNotification(userId, 'subscription_expiry', 'Subscription Expiring Soon', `Your subscription expires in ${hoursLeft} hours. Renew now to keep access!`, subscriptionId, 'subscription');
 };
 
 App.notifySubscriptionExpired = async function(userId, subscriptionId) {
@@ -1588,10 +1353,9 @@ App.notifySubscriptionExpired = async function(userId, subscriptionId) {
 
 App.notifyVipExpiring = async function(userId, purchaseId, hoursLeft) {
     if (!userId) return;
-    await this.sendNotification(userId, 'vip_expiry', 'VIP Access Expiring', 'Your VIP access expires in ' + hoursLeft + ' hours.', purchaseId, 'vip_purchase');
+    await this.sendNotification(userId, 'vip_expiry', 'VIP Access Expiring', `Your VIP access expires in ${hoursLeft} hours.`, purchaseId, 'vip_purchase');
 };
 
-// Welcome notification
 App.notifyWelcome = async function(userId) {
     if (!userId) return;
     await this.sendNotification(userId, 'welcome', 'Welcome to OnlyFans!', 'We are excited to have you here. Explore creators and subscribe to exclusive content.', '', '');
@@ -1899,110 +1663,82 @@ App.compressImage = function(file, type) {
 
 // Video compression: extract frames and create a compressed preview video
 // On mobile browsers, this falls back to uploading original with size check
-// ============================================================
-// SAFE VIDEO COMPRESSION - Never hangs, works on all devices
-// ============================================================
 App.compressVideo = function(file) {
-    return new Promise((resolve) => {
-        // SAFETY: Always resolve within 3 seconds no matter what
-        const safetyTimer = setTimeout(() => {
-            console.log('[VIDEO] Compression safety timeout - using original file');
-            resolve(file);
-        }, 3000);
-
-        // If file is under 50MB, skip compression entirely
-        // Modern networks and Supabase can handle this fine
-        if (file.size < 50 * 1024 * 1024) {
-            clearTimeout(safetyTimer);
-            console.log('[VIDEO] File under 50MB, skipping compression');
+    return new Promise((resolve, reject) => {
+        // If file is already under 20MB, skip compression (browser video compression is limited)
+        if (file.size < 20 * 1024 * 1024) {
+            console.log('[VIDEO] File under 20MB, skipping compression');
             resolve(file);
             return;
         }
-
-        // For large files (>50MB), try lightweight compression
-        // but ALWAYS fall back to original if anything goes wrong
-        this.toast(`Large video (${this.formatFileSize(file.size)}). Attempting compression...`, 'info', 3000);
-
-        try {
-            const video = document.createElement('video');
-            video.muted = true;
-            video.playsInline = true;
-            video.preload = 'metadata';
-            const objUrl = URL.createObjectURL(file);
-
-            const cleanup = () => {
-                clearTimeout(safetyTimer);
-                try { URL.revokeObjectURL(objUrl); } catch(e) {}
-            };
-
-            // If metadata doesn't load in 2 seconds, use original
-            const metaTimer = setTimeout(() => {
-                console.log('[VIDEO] Metadata load timeout - using original');
-                cleanup();
-                resolve(file);
-            }, 2000);
-
-            video.onloadedmetadata = () => {
-                clearTimeout(metaTimer);
-                // Check video duration - if very long, compression would take too long
-                if (video.duration > 300) { // > 5 minutes
-                    console.log('[VIDEO] Video too long (' + Math.round(video.duration) + 's) - using original');
-                    cleanup();
-                    resolve(file);
-                    return;
+        this.toast(`Compressing video: ${this.formatFileSize(file.size)}...`, 'info', 3000);
+        // Attempt to use MediaRecorder for re-encoding at lower bitrate
+        const video = document.createElement('video');
+        video.muted = true;
+        video.playsInline = true;
+        const url = URL.createObjectURL(file);
+        video.src = url;
+        video.onloadedmetadata = () => {
+            video.play().then(() => {
+                // Determine output resolution (max 720p)
+                let outW = video.videoWidth, outH = video.videoHeight;
+                if (outW > 1280) { outH = Math.round(outH * (1280 / outW)); outW = 1280; }
+                if (outH > 720) { outW = Math.round(outW * (720 / outH)); outH = 720; }
+                // Make dimensions even (required for some codecs)
+                outW = Math.floor(outW / 2) * 2; outH = Math.floor(outH / 2) * 2;
+                const canvas = document.createElement('canvas');
+                canvas.width = outW; canvas.height = outH;
+                const ctx = canvas.getContext('2d');
+                const stream = canvas.captureStream();
+                // Try to capture audio
+                let audioStream = null;
+                try {
+                    const audCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    const src = audCtx.createMediaElementSource(video);
+                    const dest = audCtx.createMediaStreamDestination();
+                    src.connect(dest);
+                    src.connect(audCtx.destination);
+                    audioStream = dest.stream;
+                } catch (ae) { /* No audio */ }
+                if (audioStream) {
+                    audioStream.getAudioTracks().forEach(t => stream.addTrack(t));
                 }
-                video.play().then(() => {
-                    let outW = video.videoWidth, outH = video.videoHeight;
-                    if (outW > 1280) { outH = Math.round(outH * (1280 / outW)); outW = 1280; }
-                    if (outH > 720) { outW = Math.round(outW * (720 / outH)); outH = 720; }
-                    outW = Math.floor(outW / 2) * 2; outH = Math.floor(outH / 2) * 2;
-                    const canvas = document.createElement('canvas');
-                    canvas.width = outW; canvas.height = outH;
-                    const ctx = canvas.getContext('2d');
-                    const stream = canvas.captureStream();
-                    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' :
-                                     MediaRecorder.isTypeSupported('video/webm;codecs=vp8') ? 'video/webm;codecs=vp8' :
-                                     MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : '';
-                    if (!mimeType) {
-                        console.log('[VIDEO] MediaRecorder not supported - using original');
-                        cleanup(); resolve(file); return;
-                    }
-                    const mediaRecorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 1500000 });
-                    const chunks = [];
-                    mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-                    mediaRecorder.onstop = () => {
-                        cleanup();
-                        const blob = new Blob(chunks, { type: 'video/webm' });
-                        if (blob.size < 1024) { resolve(file); return; } // Compressed too small = failure
-                        const compressed = new File([blob], (file.name || 'video').replace(/\.[^.]+$/, '') + '.webm', { type: 'video/webm' });
-                        const saved = ((file.size - compressed.size) / file.size * 100).toFixed(0);
-                        if (saved > 5) this.toast(`Compressed: ${this.formatFileSize(file.size)} → ${this.formatFileSize(compressed.size)} (${saved}% smaller)`, 'success', 2000);
-                        resolve(compressed);
-                    };
-                    mediaRecorder.onerror = () => { cleanup(); resolve(file); };
-                    const drawFrame = () => { if (video.paused || video.ended) return; ctx.drawImage(video, 0, 0, outW, outH); requestAnimationFrame(drawFrame); };
-                    mediaRecorder.start(100);
-                    drawFrame();
-                    video.onended = () => mediaRecorder.stop();
-                }).catch(() => { cleanup(); resolve(file); });
-            };
-            video.onerror = () => { clearTimeout(metaTimer); cleanup(); resolve(file); };
-            video.src = objUrl;
-        } catch (e) {
-            clearTimeout(safetyTimer);
-            console.log('[VIDEO] Compression error:', e.message, '- using original');
-            resolve(file);
-        }
+                const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' :
+                                 MediaRecorder.isTypeSupported('video/webm;codecs=vp8') ? 'video/webm;codecs=vp8' :
+                                 'video/webm';
+                const mediaRecorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 1500000 });
+                const chunks = [];
+                mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+                mediaRecorder.onstop = () => {
+                    URL.revokeObjectURL(url);
+                    const blob = new Blob(chunks, { type: 'video/webm' });
+                    const compressed = new File([blob], (file.name || 'video').replace(/\.[^.]+$/, '') + '.webm', { type: 'video/webm' });
+                    const saved = ((file.size - compressed.size) / file.size * 100).toFixed(0);
+                    if (saved > 5) this.toast(`Compressed: ${this.formatFileSize(file.size)} → ${this.formatFileSize(compressed.size)} (${saved}% smaller)`, 'success', 2000);
+                    resolve(compressed);
+                };
+                mediaRecorder.onerror = () => {
+                    URL.revokeObjectURL(url);
+                    resolve(file); // Fallback to original
+                };
+                const drawFrame = () => {
+                    if (video.paused || video.ended) return;
+                    ctx.drawImage(video, 0, 0, outW, outH);
+                    requestAnimationFrame(drawFrame);
+                };
+                mediaRecorder.start(100);
+                drawFrame();
+                video.onended = () => mediaRecorder.stop();
+            }).catch(() => {
+                URL.revokeObjectURL(url);
+                resolve(file); // Fallback
+            });
+        };
+        video.onerror = () => {
+            URL.revokeObjectURL(url);
+            resolve(file); // Fallback to original on error
+        };
     });
-};
-
-// uploadMediaWithProgress - delegates to the working uploadMedia
-// Kept for backward compatibility, uses the exact same upload path
-App.uploadMediaWithProgress = async function(file, type, onProgress) {
-    if (onProgress) onProgress(0);
-    const url = await this.uploadMedia(file, type);
-    if (onProgress) onProgress(100);
-    return url;
 };
 
 // Universal media upload with progress and compression
@@ -2010,7 +1746,9 @@ App.uploadMediaWithProgress = async function(file, type, onProgress) {
 App.uploadMedia = async function(file, type) {
     const uid = Auth.getUid();
     if (!uid) throw new Error('Not authenticated');
+    // Step 1: Validate file size
     if (!this.checkFileSize(file, type)) throw new Error('File too large');
+    // Step 2: Compress
     let processedFile = file;
     const isImage = file.type.startsWith('image/');
     const isVideo = file.type.startsWith('video/');
@@ -2021,14 +1759,11 @@ App.uploadMedia = async function(file, type) {
         this.toast('Preparing file...', 'info', 1000);
         processedFile = await this.compressVideo(file);
     }
+    // Step 3: Upload to Supabase
     this.toast('Uploading...', 'info', 3000);
     let url;
-    try {
-        if (isVideo) url = await Storage.uploadVideo(uid, processedFile);
-        else url = await Storage.uploadPhoto(uid, processedFile);
-    } catch (storageErr) {
-        throw storageErr;
-    }
+    if (isVideo) url = await Storage.uploadVideo(uid, processedFile);
+    else url = await Storage.uploadPhoto(uid, processedFile);
     if (!url) throw new Error('Upload failed');
     this.toast('Upload complete!', 'success', 2000);
     return url;
@@ -2287,139 +2022,26 @@ App.publishPost = async function() {
     } catch (e) { console.error('[PUBLISH] Error:', e); this.toast('Publish failed', 'error'); }
 };
 
-App.handleVipUpload = function(e) {
-    const f = e.target.files?.[0];
-    if (!f) return;
-
-    // File type validation
-    const validTypes = ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-m4v'];
-    const ext = (f.name || '').split('.').pop().toLowerCase();
-    const validExts = ['mp4', 'mov', 'webm', 'm4v'];
-    if (!validTypes.includes(f.type) && !validExts.includes(ext)) {
-        this.toast('Invalid file: ' + (f.name || 'unknown') + '. Only MP4, MOV, and WEBM videos are allowed.', 'error', 5000);
-        // Invalid file type
-        e.target.value = ''; // Clear the input
-        return;
-    }
-
-    // File size validation
-    if (!this.checkFileSize(f, 'video')) { e.target.value = ''; return; }
-
-    this.vipFile = f;
-    console.log('[VIP] Selected:', f.name, 'size:', this.formatFileSize(f.size), 'type:', f.type);
-
-    // Show preview using object URL (does NOT read file, leaves File untouched for upload)
-    try {
-        const c = document.getElementById('vipVideoPreview');
-        if (c) {
-            c.style.display = 'block';
-            const v = c.querySelector('video');
-            if (v) {
-                // Revoke previous object URL to prevent memory leak
-                if (this._vipPreviewUrl) { URL.revokeObjectURL(this._vipPreviewUrl); }
-                this._vipPreviewUrl = URL.createObjectURL(f);
-                v.src = this._vipPreviewUrl;
-            }
-        }
-        this.toast('Video selected: ' + f.name + ' (' + this.formatFileSize(f.size) + ')', 'success', 2000);
-    } catch (previewErr) {
-        // Preview error
-        // Preview failed but file is still valid for upload
-        this.toast('Video selected (preview unavailable): ' + f.name, 'info', 2000);
-    }
-};
-// ============================================================
-// VIP VIDEO PUBLISH - Uses the EXACT SAME upload path as working posts
-// ============================================================
+App.handleVipUpload = function(e) { const f = e.target.files?.[0]; if (!f) return; if (!this.checkFileSize(f, 'video')) return; this.vipFile = f; const reader = new FileReader(); reader.onload = (ev) => { const c = document.getElementById('vipVideoPreview'); if (c) { c.style.display = 'block'; const v = c.querySelector('video'); if (v) v.src = ev.target.result; } }; reader.readAsDataURL(f); };
 App.publishVip = async function() {
-    // Prevent double-click on mobile
-    if (this._isPublishingVip) { console.log('[VIP] Already publishing, ignoring double-click'); return; }
-    this._isPublishingVip = true;
-
-    if (!this.vipFile) { this.toast('Please select a video first', 'error'); this._isPublishingVip = false; return; }
+    if (!this.vipFile) { this.toast('Select a video', 'error'); return; }
     const title = document.getElementById('vipVideoTitle')?.value.trim();
     const price = parseFloat(document.getElementById('vipVideoPrice')?.value);
-    const desc = document.getElementById('vipVideoDesc')?.value || '';
-    if (!title) { this.toast('Enter a title for your video', 'error'); this._isPublishingVip = false; return; }
-    if (!price || price < 1 || isNaN(price)) { this.toast('Enter a valid price (minimum $1)', 'error'); this._isPublishingVip = false; return; }
-
-    const publishBtn = document.querySelector('#admin-vip .btn-gold, button[onclick*="publishVip"]');
-    if (publishBtn) { publishBtn.disabled = true; publishBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Publishing...'; }
-
+    if (!title) { this.toast('Enter title', 'error'); return; }
+    if (!price || price < 1 || isNaN(price)) { this.toast('Enter valid price', 'error'); return; }
     try {
-        const videoUrl = await this.uploadMedia(this.vipFile, 'video');
-        if (!videoUrl) throw new Error('Upload returned empty URL');
-
-        const dbRecord = await DB.createVipVideo({
-            creator_id: Auth.getUid(),
-            title,
-            description: desc,
-            video_url: videoUrl,
-            price
-        });
-        if (!dbRecord) throw new Error('Database save failed');
-
-        // Clean up
-        this.vipFile = null;
-        if (this._vipPreviewUrl) { URL.revokeObjectURL(this._vipPreviewUrl); this._vipPreviewUrl = null; }
-        document.getElementById('vipVideoTitle').value = '';
-        document.getElementById('vipVideoDesc').value = '';
-        document.getElementById('vipVideoPrice').value = '';
-        const c = document.getElementById('vipVideoPreview');
-        if (c) { c.style.display = 'none'; const v = c.querySelector('video'); if (v) v.src = ''; }
-
-        this.toast('VIP video published!', 'success');
-        this.renderAdmin();
-        if (dbRecord?.id) { try { this.notifyNewVip(Auth.getUid(), dbRecord.id); } catch (n) {} }
-
-    } catch (e) {
-        // VIP publish error handled by toast
-        this.toast('Failed: ' + (e.message || 'Unknown error'), 'error');
-    } finally {
-        this._isPublishingVip = false;
-        if (publishBtn) {
-            publishBtn.disabled = false;
-            publishBtn.innerHTML = '<i class="fas fa-crown"></i> Publish VIP Video';
-        }
-    }
+        let url = null;
+        try { url = await this.uploadMedia(this.vipFile, 'video'); }
+        catch (upErr) { this.toast(upErr.message, 'error'); return; }
+        if (!url) { this.toast('Upload failed', 'error'); return; }
+        const result = await DB.createVipVideo({ creator_id: Auth.getUid(), title, description: document.getElementById('vipVideoDesc')?.value || '', video_url: url, price });
+        this.vipFile = null; document.getElementById('vipVideoTitle').value = ''; document.getElementById('vipVideoDesc').value = ''; document.getElementById('vipVideoPrice').value = '';
+        const c = document.getElementById('vipVideoPreview'); if (c) c.style.display = 'none';
+        this.toast('VIP video published!', 'success'); this.renderAdmin();
+        // Notify subscribers about new VIP content
+        if (result?.id) { try { this.notifyNewVip(Auth.getUid(), result.id); } catch (n) {} }
+    } catch (e) { this.toast('Failed', 'error'); }
 };
-
-// Progress bar UI helpers
-App._showVipUploadProgress = function(show) {
-    let container = document.getElementById('vipUploadProgressContainer');
-    if (!container) {
-        // Create the progress container if it doesn't exist
-        const formContainer = document.getElementById('vipVideoPreview')?.parentElement;
-        if (!formContainer) return;
-        container = document.createElement('div');
-        container.id = 'vipUploadProgressContainer';
-        container.style.cssText = 'display:none;margin:12px 0;padding:12px;background:var(--bg-card);border-radius:12px;border:1px solid var(--border);';
-        container.innerHTML = `
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-                <span id="vipProgressLabel" style="font-size:13px;color:var(--text-secondary)">Uploading...</span>
-                <span id="vipProgressPercent" style="font-size:13px;font-weight:700;color:var(--primary)">0%</span>
-            </div>
-            <div style="width:100%;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
-                <div id="vipProgressBar" style="width:0%;height:100%;background:linear-gradient(90deg,var(--primary),var(--accent));border-radius:3px;transition:width 0.3s ease"></div>
-            </div>`;
-        const previewEl = document.getElementById('vipVideoPreview');
-        if (previewEl && previewEl.nextElementSibling) {
-            previewEl.parentElement.insertBefore(container, previewEl.nextElementSibling);
-        }
-    }
-    if (container) container.style.display = show ? 'block' : 'none';
-};
-
-App._updateVipProgress = function(percent, label) {
-    const bar = document.getElementById('vipProgressBar');
-    const pct = document.getElementById('vipProgressPercent');
-    const lbl = document.getElementById('vipProgressLabel');
-    if (bar) bar.style.width = Math.min(100, Math.max(0, percent)) + '%';
-    if (pct) pct.textContent = Math.min(100, Math.max(0, percent)) + '%';
-    if (lbl) lbl.textContent = label || 'Uploading...';
-};
-
-App._delay = function(ms) { return new Promise(r => setTimeout(r, ms)); };
 App.delVip = async function(id) {
     console.log('[DELETE] delVip called with id:', id);
     if (!id) return;
@@ -2727,7 +2349,7 @@ App.approvePayment = async function(paymentId) {
             try {
                 const { data: vipPurchase } = await getSb().from('vip_purchases').select('*').eq('buyer_id', payment.user_id).eq('status', 'pending').order('created_at', { ascending: false }).limit(1).maybeSingle();
                 if (vipPurchase) await getSb().from('vip_purchases').update({ status: 'approved' }).eq('id', vipPurchase.id);
-            } catch (vipErr) { /* silent */ }
+            } catch (vipErr) { console.error('[VIP] Approve:', vipErr.message); }
         }
         this.toast(`Payment approved! ${planType} subscription active for ${durationDays} days.`, 'success');
         this.renderPayments('all'); this.renderSubs('all');
@@ -2774,80 +2396,16 @@ App.verifyOwner = function() { const input = document.getElementById('ownerPassw
 App.closeOwner = function() { this.go('landing'); };
 App.renderOwner = async function() { try { const stats = await DB.getOwnerStats(); const revenue = await DB.getTotalRevenue(); if (stats) { const su = document.getElementById('ownerStatUsers'); const sc = document.getElementById('ownerStatCreators'); const sp = document.getElementById('ownerStatPosts'); const ss = document.getElementById('ownerStatSubs'); const sr = document.getElementById('ownerStatRevenue'); const sm = document.getElementById('ownerStatMsgs'); if (su) su.textContent = stats.totalUsers; if (sc) sc.textContent = stats.totalCreators; if (sp) sp.textContent = stats.totalPosts; if (ss) ss.textContent = stats.activeSubs; if (sr) sr.textContent = '$' + revenue.toFixed(2); if (sm) sm.textContent = stats.totalMessages; } } catch (e) {} try { const users = await DB.listAllUsers(); const ul = document.getElementById('ownerUsersList'); if (ul) ul.innerHTML = users.length ? users.map(u => this.ownerUserCard(u)).join('') : '<p class="no-content">No users yet</p>'; } catch (e) {} try { const creators = await DB.listAllCreators(); const cl = document.getElementById('ownerCreatorsList'); if (cl) cl.innerHTML = creators.length ? creators.map(c => this.ownerCreatorCard(c)).join('') : '<p class="no-content">No creators yet</p>'; } catch (e) {} try { const posts = await DB.getPosts(null, 50); const pl = document.getElementById('ownerPostsList'); if (pl) pl.innerHTML = posts.length ? posts.map(p => this.ownerPostCard(p)).join('') : '<p class="no-content">No posts yet</p>'; } catch (e) {} this.renderOwnerSubs('all'); this.renderOwnerTrans(); this.setupTransRealtime(); this.renderOwnerBadges('all'); this.renderBoostHistory(); };
 App.ownerUserCard = function(u) { const avatar = u.avatar ? `style="background-image:url('${u.avatar}')"` : ''; const initial = u.avatar ? '' : (u.display_name || u.username).charAt(0).toUpperCase(); const joined = u.created_at ? new Date(u.created_at).toLocaleDateString() : 'Unknown'; return `<div class="owner-user-card"><div class="owner-avatar" ${avatar}>${initial}</div><div class="owner-info"><div class="owner-name">@${this.esc(u.display_name || u.username)}</div><div class="owner-email">${this.esc(u.email || 'No email')}</div><div class="owner-meta">Balance: $${parseFloat(u.balance || 0).toFixed(2)} &middot; Joined: ${joined}</div></div><div class="owner-actions"><span class="status-badge status-active">ACTIVE</span><button class="btn btn-danger btn-sm" onclick="App.ownerDeleteUser('${u.id}', '${this.esc(u.username)}')"><i class="fas fa-trash-alt"></i></button></div></div>`; };
-App.ownerCreatorCard = function(c) { const avatar = c.avatar ? `style="background-image:url('${c.avatar}')"` : ''; const initial = c.avatar ? '' : (c.display_name || c.username).charAt(0).toUpperCase(); return `<div class="owner-user-card"><div class="owner-avatar" ${avatar}>${initial}</div><div class="owner-info"><div class="owner-name">${this.esc(c.display_name || c.username)}${c.verified ? ' <i class="fas fa-check-circle verified-badge"></i>' : ''}</div><div class="owner-email">@${c.username}</div><div class="owner-meta">$${c.monthly_price}/mo &middot; ${c.subscribers_count} subs &middot; ${c.posts_count} posts</div></div><div class="owner-actions"><span class="status-badge status-active">CREATOR</span><button class="btn btn-danger btn-sm" onclick="App.ownerDeleteUser('${c.id}', '${this.esc(c.username)}')" title="Permanently delete creator"><i class="fas fa-trash-alt"></i></button></div></div>`; };
+App.ownerCreatorCard = function(c) { const avatar = c.avatar ? `style="background-image:url('${c.avatar}')"` : ''; const initial = c.avatar ? '' : (c.display_name || c.username).charAt(0).toUpperCase(); return `<div class="owner-user-card"><div class="owner-avatar" ${avatar}>${initial}</div><div class="owner-info"><div class="owner-name">${this.esc(c.display_name || c.username)}${c.verified ? ' <i class="fas fa-check-circle verified-badge"></i>' : ''}</div><div class="owner-email">@${c.username}</div><div class="owner-meta">$${c.monthly_price}/mo &middot; ${c.subscribers_count} subs &middot; ${c.posts_count} posts</div></div></div>`; };
 App.ownerPostCard = function(p) { const cv = p.creator?.verified ? '<i class="fas fa-check-circle verified-badge" style="font-size:10px;margin-left:3px"></i>' : ''; return `<div class="owner-user-card"><div class="owner-avatar" style="background-image:url('${p.media_url}');border-radius:8px;width:48px;height:48px"></div><div class="owner-info"><div class="owner-name">${this.esc(p.caption || 'No caption')}</div><div class="owner-email">by ${this.esc(p.creator?.display_name || 'Unknown')}${cv}</div><div class="owner-meta">${p.type} &middot; ${p.likes_count || 0} likes &middot; ${this.timeAgo(p.created_at)}</div></div></div>`; };
-// ===================== PERMANENT USER DELETION =====================
-// Shows detailed confirmation then permanently deletes user + all data
 App.ownerDeleteUser = async function(userId, username) {
-    if (!userId) { this.toast('Error: No user ID', 'error'); return; }
-
-    // Step 1: Preview what will be deleted
-    let preview = null;
+    if (!userId) return;
+    if (!confirm(`WARNING: Permanently delete @${username}? This cannot be undone.`)) return;
     try {
-        preview = await DB.previewUserDeletion(userId);
-    } catch (e) { console.warn('[DELETE] Preview failed:', e.message); }
-
-    // Step 2: Build detailed confirmation message
-    let confirmMsg = `Are you sure you want to permanently delete @${username}?\n\nThis action CANNOT be undone.\n\nThe following will be permanently removed:`;
-    if (preview) {
-        if (preview.posts > 0) confirmMsg += `\n  \u2022 ${preview.posts} post(s)`;
-        if (preview.vip_videos > 0) confirmMsg += `\n  \u2022 ${preview.vip_videos} VIP video(s)`;
-        if (preview.stories > 0) confirmMsg += `\n  \u2022 ${preview.stories} story/stories`;
-        if (preview.subscriptions_as_subscriber > 0) confirmMsg += `\n  \u2022 ${preview.subscriptions_as_subscriber} subscription(s) as fan`;
-        if (preview.subscriptions_as_creator > 0) confirmMsg += `\n  \u2022 ${preview.subscriptions_as_creator} subscriber(s) as creator`;
-        if (preview.payments > 0) confirmMsg += `\n  \u2022 ${preview.payments} payment record(s)`;
-        if (preview.messages > 0) confirmMsg += `\n  \u2022 ${preview.messages} message(s)`;
-        if (preview.notifications > 0) confirmMsg += `\n  \u2022 ${preview.notifications} notification(s)`;
-        if (preview.likes > 0) confirmMsg += `\n  \u2022 ${preview.likes} like(s)`;
-        if (preview.storage_files > 0) confirmMsg += `\n  \u2022 ${preview.storage_files} uploaded file(s)`;
-        if (preview.transactions > 0) confirmMsg += `\n  \u2022 ${preview.transactions} transaction(s)`;
-        if (preview.badges > 0) confirmMsg += `\n  \u2022 ${preview.badges} verified badge(s)`;
-        confirmMsg += `\n\nUser account and auth credentials will also be destroyed. The email will be free to register again.`;
-    } else {
-        confirmMsg += `\n  \u2022 All posts, videos, stories\n  \u2022 All subscriptions and payments\n  \u2022 All messages and notifications\n  \u2022 All uploaded media files\n  \u2022 Auth account (cannot log in again)`;
-    }
-
-    // Step 3: Show confirmation dialog
-    if (!confirm(confirmMsg)) return;
-
-    // Step 4: Show loading state
-    this.toast('Deleting user and all data...', 'info', 8000);
-
-    // Step 5: Execute permanent deletion via RPC
-    try {
-        const result = await DB.deleteUser(userId);
-        console.log('[DELETE] Result:', result);
-
-        if (result && result.success) {
-            // Build success message with details
-            let details = [];
-            if (result.posts_deleted > 0) details.push(`${result.posts_deleted} posts`);
-            if (result.videos_deleted > 0) details.push(`${result.videos_deleted} videos`);
-            if (result.stories_deleted > 0) details.push(`${result.stories_deleted} stories`);
-            if (result.subscriptions_deleted > 0) details.push(`${result.subscriptions_deleted} subscriptions`);
-            if (result.payments_deleted > 0) details.push(`${result.payments_deleted} payments`);
-            if (result.messages_deleted > 0) details.push(`${result.messages_deleted} messages`);
-            if (result.likes_deleted > 0) details.push(`${result.likes_deleted} likes`);
-            if (result.storage_files_deleted > 0) details.push(`${result.storage_files_deleted} files`);
-            if (result.notifications_deleted > 0) details.push(`${result.notifications_deleted} notifications`);
-
-            let msg = 'User permanently deleted.';
-            if (details.length > 0) msg += ' Removed: ' + details.join(', ') + '.';
-
-            this.toast(msg, 'success', 6000);
-
-            // Step 6: Refresh entire owner dashboard with updated stats
-            setTimeout(() => { this.renderOwner(); }, 500);
-        } else {
-            // Show the actual error message from the server
-            const errMsg = result && result.message ? result.message : 'Delete failed: unknown error';
-            console.error('[DELETE] Failed:', errMsg, result);
-            this.toast('Delete failed: ' + errMsg, 'error', 6000);
-        }
-    } catch (e) {
-        console.error('[DELETE] Exception:', e.message);
-        this.toast('Delete failed: ' + (e.message || 'Network error'), 'error', 6000);
-    }
+        const success = await DB.deleteUser(userId);
+        if (success) { this.toast('User deleted.', 'success'); this.renderOwner(); }
+        else this.toast('Delete failed.', 'error');
+    } catch (e) { this.toast('Delete failed: ' + e.message, 'error'); }
 };
 App._ownerSubs = []; App.renderOwnerSubs = async function(status, btn) { if (btn) { document.querySelectorAll('#ownerTab-subs .filter-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); } try { const subs = await DB.getAllSubscriptions(); this._ownerSubs = subs; const filtered = status === 'all' ? subs : subs.filter(s => s.status === status); const list = document.getElementById('ownerSubsList'); if (!list) return; list.innerHTML = filtered.length ? filtered.map(s => { const subName = this.esc(s.subscriber?.display_name || s.subscriber?.username || 'Unknown'); const crName = this.esc(s.creator?.display_name || s.creator?.username || 'Unknown'); const started = s.created_at ? new Date(s.created_at).toLocaleString() : 'Unknown'; const statusClass = s.status === 'approved' ? 'status-active' : s.status === 'pending' ? 'status-pending' : 'status-rejected'; return `<div class="owner-sub-card"><div class="sub-header"><div class="sub-users">@${subName} &rarr; @${crName}</div><span class="status-badge ${statusClass}">${s.status}</span></div><div class="sub-details">Plan: ${s.plan_type} &middot; $${parseFloat(s.amount || 0).toFixed(2)} &middot; ${started}</div></div>`; }).join('') : '<p class="no-content">No subscriptions yet</p>'; } catch (e) {} };
 App.filterOwnerSubs = function(status, btn) { this.renderOwnerSubs(status, btn); };
@@ -3092,7 +2650,7 @@ App.renderVipSubscribers = async function() {
         if (sA) sA.textContent = stats.active; if (sP) sP.textContent = stats.pending;
         if (sE) sE.textContent = stats.expired; if (sD) sD.textContent = stats.declined;
         if (sDi) sDi.textContent = stats.disabled;
-    } catch (e) { /* silent */ }
+    } catch (e) { console.error('[VIP SUBS] render:', e.message); }
 };
 
 App.filterVipSubscribers = function(status, btn) {
@@ -3133,7 +2691,7 @@ App.vipSubCard = function(p) {
 };
 
 App.approveVipPurchase = async function(purchaseId) {
-    if (!purchaseId) { return; }
+    if (!purchaseId) { console.warn('[VIP] approve: no purchaseId'); return; }
     console.log('[VIP] Approving purchase:', purchaseId);
     try {
         const purchase = this._vipSubs.find(s => s.id === purchaseId);
@@ -3146,7 +2704,7 @@ App.approveVipPurchase = async function(purchaseId) {
         } else {
             this.toast('Failed to approve. Check console for details.', 'error');
         }
-    } catch (e) { this.toast('Error: ' + e.message, 'error'); }
+    } catch (e) { console.error('[VIP] approve error:', e); this.toast('Error: ' + e.message, 'error'); }
 };
 
 App.declineVipPurchase = async function(purchaseId) {
@@ -3160,7 +2718,7 @@ App.declineVipPurchase = async function(purchaseId) {
             this.toast('VIP purchase declined.', 'info');
             await this.renderVipSubscribers();
         } else this.toast('Failed', 'error');
-    } catch (e) { this.toast('Error', 'error'); }
+    } catch (e) { console.error('[VIP] decline error:', e); this.toast('Error', 'error'); }
 };
 
 App.disableVipPurchase = async function(purchaseId) {
@@ -3171,7 +2729,7 @@ App.disableVipPurchase = async function(purchaseId) {
         console.log('[VIP] DB disable result:', success);
         if (success) { this.toast('VIP access disabled.', 'info'); await this.renderVipSubscribers(); }
         else this.toast('Failed', 'error');
-    } catch (e) { this.toast('Error', 'error'); }
+    } catch (e) { console.error('[VIP] disable error:', e); this.toast('Error', 'error'); }
 };
 
 App.removeVipPurchase = async function(purchaseId) {
@@ -3182,7 +2740,7 @@ App.removeVipPurchase = async function(purchaseId) {
         console.log('[VIP] DB remove result:', success);
         if (success) { this.toast('Removed.', 'info'); await this.renderVipSubscribers(); }
         else this.toast('Failed', 'error');
-    } catch (e) { this.toast('Error', 'error'); }
+    } catch (e) { console.error('[VIP] remove error:', e); this.toast('Error', 'error'); }
 };
 
 App.searchVipSubscribers = function(query) {
@@ -3254,7 +2812,7 @@ App.openVipVideo = async function(id) {
             const usdtQrUrl = settings?.usdt_qr_url;
             if (btcQRBox) { if (btcQrUrl) { btcQRBox.style.backgroundImage = `url('${btcQrUrl}')`; btcQRBox.style.backgroundSize = 'cover'; btcQRBox.innerHTML = ''; } else { btcQRBox.style.backgroundImage = 'none'; btcQRBox.innerHTML = 'Bitcoin QR<br>Not Set'; } }
             if (usdtQRBox) { if (usdtQrUrl) { usdtQRBox.style.backgroundImage = `url('${usdtQrUrl}')`; usdtQRBox.style.backgroundSize = 'cover'; usdtQRBox.innerHTML = ''; } else { usdtQRBox.style.backgroundImage = 'none'; usdtQRBox.innerHTML = 'USDT QR<br>Not Set'; } }
-        } catch (settingsErr) { /* silent */ }
+        } catch (settingsErr) { console.error('[VIP] Load payment settings:', settingsErr.message); }
         this.resetGiftcardForm();
         this.openModal('paymentModal');
     } catch (e) { console.error('[APP] openVipVideo:', e.message); }
