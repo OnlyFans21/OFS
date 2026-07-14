@@ -1371,49 +1371,101 @@ const DB = {
 
 // ===================== STORAGE =====================
 const Storage = {
-    async uploadFile(bucket, userId, file, prefix) {
-        if (!userId || !file) { console.warn('[Storage] Missing userId or file'); return null; }
-        const client = getSb(); if (!client) { console.warn('[Storage] No client'); return null; }
+    // Verify a bucket exists and is accessible before uploading
+    async verifyBucket(bucket) {
+        const client = getSb(); if (!client) throw new Error('Supabase client not initialized');
         try {
-            const name = file.name || 'file';
-            const ext = name.split('.').pop() || 'jpg';
-            const path = `${userId}/${Date.now()}_${prefix || 'file'}.${ext}`;
-            console.log(`[Storage] Uploading to ${bucket}:`, path, 'size:', file.size);
-            const { error } = await client.storage.from(bucket).upload(path, file, { contentType: file.type || 'application/octet-stream' });
-            if (error) { console.error(`[Storage] ${bucket} upload error:`, error.message); return null; }
-            const url = client.storage.from(bucket).getPublicUrl(path).data.publicUrl;
-            console.log(`[Storage] ${bucket} uploaded:`, url);
-            return url;
-        } catch (e) { console.error(`[Storage] ${bucket} exception:`, e.message); return null; }
+            const { data: buckets, error } = await client.storage.listBuckets();
+            if (error) throw new Error('Cannot list buckets: ' + error.message);
+            const found = buckets.find(b => b.name === bucket || b.id === bucket);
+            if (!found) throw new Error('Storage bucket "' + bucket + '" does not exist. Run the SQL to create it.');
+            console.log('[Storage] Bucket verified:', bucket, 'public:', found.public);
+            return found;
+        } catch (e) {
+            if (e.message.includes('does not exist')) throw e;
+            throw new Error('Bucket verification failed: ' + e.message);
+        }
     },
 
-    // Upload with progress callback (uses XMLHttpRequest for progress tracking)
+    // Upload file - THROWS on error with actual message
+    async uploadFile(bucket, userId, file, prefix) {
+        if (!userId) throw new Error('User not authenticated');
+        if (!file) throw new Error('No file provided');
+        const client = getSb(); if (!client) throw new Error('Supabase client not initialized');
+
+        // Step 1: Verify bucket exists
+        await this.verifyBucket(bucket);
+
+        // Step 2: Build unique path
+        const name = file.name || 'file';
+        const ext = name.split('.').pop() || 'mp4';
+        const uniqueName = crypto.randomUUID ? crypto.randomUUID() : Date.now() + '_' + Math.random().toString(36).substring(2, 10);
+        const path = `${userId}/${Date.now()}_${prefix || 'file'}_${uniqueName}.${ext}`;
+        console.log(`[Storage] Uploading to bucket="${bucket}" path="${path}" size=${file.size} type="${file.type || 'unknown'}"`);
+
+        // Step 3: Upload to Supabase Storage
+        const { data: uploadData, error: uploadError } = await client.storage.from(bucket).upload(path, file, {
+            contentType: file.type || 'application/octet-stream',
+            upsert: false
+        });
+
+        if (uploadError) {
+            console.error(`[Storage] UPLOAD FAILED bucket="${bucket}":`, uploadError);
+            throw new Error('Storage upload failed: ' + uploadError.message + ' (bucket: ' + bucket + ')');
+        }
+        console.log(`[Storage] Upload success:`, uploadData);
+
+        // Step 4: Get public URL
+        const { data: urlData } = client.storage.from(bucket).getPublicUrl(path);
+        const publicUrl = urlData?.publicUrl;
+        if (!publicUrl) {
+            throw new Error('getPublicUrl returned empty. Bucket "' + bucket + '" may be private or path is wrong. Path: ' + path);
+        }
+        console.log(`[Storage] Public URL:`, publicUrl);
+        return publicUrl;
+    },
+
+    // Upload with progress callback - THROWS on error
     async uploadFileWithProgress(bucket, userId, file, prefix, onProgress) {
-        if (!userId || !file) { console.warn('[Storage] Missing userId or file'); return null; }
-        const client = getSb(); if (!client) { console.warn('[Storage] No client'); return null; }
-        try {
-            const name = file.name || 'file';
-            const ext = name.split('.').pop() || 'jpg';
-            const path = `${userId}/${Date.now()}_${prefix || 'file'}.${ext}`;
-            console.log(`[Storage] Uploading to ${bucket}:`, path, 'size:', file.size);
+        if (!userId) throw new Error('User not authenticated');
+        if (!file) throw new Error('No file provided');
+        const client = getSb(); if (!client) throw new Error('Supabase client not initialized');
 
-            // Use standard upload for small files (< 5MB)
-            if (file.size < 5 * 1024 * 1024) {
-                const { error } = await client.storage.from(bucket).upload(path, file, { contentType: file.type || 'application/octet-stream' });
-                if (error) { console.error(`[Storage] ${bucket} upload error:`, error.message); return null; }
-                if (onProgress) onProgress(100);
-                return client.storage.from(bucket).getPublicUrl(path).data.publicUrl;
-            }
+        // Step 1: Verify bucket
+        await this.verifyBucket(bucket);
+        if (onProgress) onProgress(15);
 
-            // For larger files, use resumable upload with progress simulation
-            const { data: uploadData, error: uploadError } = await client.storage.from(bucket).upload(path, file, {
-                contentType: file.type || 'application/octet-stream',
-                upsert: false
-            });
-            if (uploadError) { console.error(`[Storage] ${bucket} upload error:`, uploadError.message); return null; }
-            if (onProgress) onProgress(100);
-            return client.storage.from(bucket).getPublicUrl(path).data.publicUrl;
-        } catch (e) { console.error(`[Storage] ${bucket} exception:`, e.message); return null; }
+        // Step 2: Build unique path
+        const name = file.name || 'file';
+        const ext = name.split('.').pop() || 'mp4';
+        const uniqueName = crypto.randomUUID ? crypto.randomUUID() : Date.now() + '_' + Math.random().toString(36).substring(2, 10);
+        const path = `${userId}/${Date.now()}_${prefix || 'file'}_${uniqueName}.${ext}`;
+        console.log(`[Storage] Uploading to bucket="${bucket}" path="${path}" size=${file.size} type="${file.type || 'unknown'}"`);
+        if (onProgress) onProgress(20);
+
+        // Step 3: Upload
+        const { data: uploadData, error: uploadError } = await client.storage.from(bucket).upload(path, file, {
+            contentType: file.type || 'application/octet-stream',
+            upsert: false
+        });
+
+        if (onProgress) onProgress(80);
+
+        if (uploadError) {
+            console.error(`[Storage] UPLOAD FAILED bucket="${bucket}":`, uploadError);
+            throw new Error('Storage upload failed: ' + uploadError.message + ' (bucket: ' + bucket + ')');
+        }
+        console.log(`[Storage] Upload response:`, uploadData);
+
+        // Step 4: Get public URL
+        const { data: urlData } = client.storage.from(bucket).getPublicUrl(path);
+        const publicUrl = urlData?.publicUrl;
+        if (!publicUrl) {
+            throw new Error('getPublicUrl returned empty. Bucket "' + bucket + '" may be private or the path is incorrect. Path: ' + path);
+        }
+        console.log(`[Storage] Public URL generated:`, publicUrl);
+        if (onProgress) onProgress(100);
+        return publicUrl;
     },
 
     async uploadAvatar(userId, file) { return this.uploadFile('avatars', userId, file, 'avatar'); },
@@ -1430,7 +1482,6 @@ const Storage = {
         if (!publicUrl) return false;
         const client = getSb(); if (!client) return false;
         try {
-            // Extract bucket and path from public URL
             const url = new URL(publicUrl);
             const pathParts = url.pathname.split('/object/public/');
             if (pathParts.length < 2) { console.warn('[Storage] Cannot parse URL:', publicUrl); return false; }
@@ -1446,8 +1497,5 @@ const Storage = {
         } catch (e) { console.error('[Storage] Delete exception:', e.message); return false; }
     },
 
-    // Delete a VIP video by its public URL
-    async deleteVipVideo(publicUrl) {
-        return this.deleteFile(publicUrl);
-    }
+    async deleteVipVideo(publicUrl) { return this.deleteFile(publicUrl); }
 };
