@@ -1998,20 +1998,24 @@ App.compressVideo = function(file) {
 
 // Upload media WITH progress callback
 // Returns the uploaded URL
+// NOW properly catches and throws actual Supabase error messages
 App.uploadMediaWithProgress = async function(file, type, onProgress) {
     const uid = Auth.getUid();
     if (!uid) throw new Error('Not authenticated');
+
     // Validate file size
     if (!this.checkFileSize(file, type)) throw new Error('File too large');
+
     // Validate file type for videos
     if (type === 'video') {
         const validTypes = ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-m4v'];
         const ext = (file.name || '').split('.').pop().toLowerCase();
         const validExts = ['mp4', 'mov', 'webm', 'm4v'];
         if (!validTypes.includes(file.type) && !validExts.includes(ext)) {
-            throw new Error('Invalid video format. Only MP4, MOV, and WEBM are supported.');
+            throw new Error('Invalid video format: "' + (file.name || 'unknown') + '". Only MP4, MOV, and WEBM are allowed.');
         }
     }
+
     // Compress
     let processedFile = file;
     const isImage = file.type?.startsWith('image/');
@@ -2023,16 +2027,24 @@ App.uploadMediaWithProgress = async function(file, type, onProgress) {
         if (onProgress) onProgress(5);
         processedFile = await this.compressVideo(file);
     }
-    // Upload with progress
+
+    // Upload with progress - Storage functions now THROW with actual error messages
     if (onProgress) onProgress(10);
-    let url;
-    if (isVideo) {
-        url = await Storage.uploadVideoWithProgress(uid, processedFile, onProgress);
-    } else {
-        url = await Storage.uploadPhoto(uid, processedFile);
+    try {
+        let url;
+        if (isVideo) {
+            url = await Storage.uploadVideoWithProgress(uid, processedFile, onProgress);
+        } else {
+            url = await Storage.uploadPhoto(uid, processedFile);
+        }
+        if (!url) throw new Error('Storage returned empty URL after upload');
+        console.log('[UPLOAD] Success, URL:', url);
+        return url;
+    } catch (e) {
+        // Re-throw with the actual Supabase error message
+        console.error('[UPLOAD] Storage error:', e.message);
+        throw new Error(e.message || 'Upload failed');
     }
-    if (!url) throw new Error('Upload failed - no URL returned from storage');
-    return url;
 };
 
 // Universal media upload with progress and compression
