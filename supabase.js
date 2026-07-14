@@ -1,8 +1,11 @@
 /**
  * SUPABASE.JS - Supabase Client & Backend Helpers
  * Connected to: https://uorhtsaxthwypupujngq.supabase.co
- * PRODUCTION VERSION - Zero missing column errors
+ * VERSION: 1.0.16
  */
+
+const SB_VERSION = '1.0.16';
+console.log('%c[SB] Version ' + SB_VERSION + ' loaded', 'background:#10b981;color:#fff;padding:2px 8px;border-radius:4px');
 
 const SUPABASE_URL = 'https://uorhtsaxthwypupujngq.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_3PtmR0zVavqlHeq7zQmbeA_i55p8VKv';
@@ -17,6 +20,34 @@ function initSupabase() {
         return null;
     }
     try {
+        // INTERCEPT FETCH to log all HTTP requests/responses
+        const originalFetch = window.fetch;
+        window.fetch = async function(...args) {
+            const url = args[0] || '';
+            const isSupabase = typeof url === 'string' && url.includes('supabase.co');
+            if (isSupabase) {
+                console.log('[HTTP] >>>', args[1]?.method || 'GET', url.substring(0, 80));
+            }
+            try {
+                const response = await originalFetch.apply(this, args);
+                if (isSupabase) {
+                    console.log('[HTTP] <<<', response.status, response.statusText, url.substring(0, 80));
+                    if (!response.ok && response.status !== 200) {
+                        const clone = response.clone();
+                        try { console.log('[HTTP] Body:', await clone.text()); } catch(e) {}
+                    }
+                }
+                return response;
+            } catch (fetchErr) {
+                if (isSupabase) {
+                    console.error('[HTTP] FAILED:', fetchErr.message, '| URL:', url.substring(0, 80));
+                    console.error('[HTTP] If this says "Failed to fetch" on github.io, it is 100% a CORS issue.');
+                    console.error('[HTTP] Fix: Supabase Dashboard > Storage > Policies > CORS > Add:', window.location.origin);
+                }
+                throw fetchErr;
+            }
+        };
+
         sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
             auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: true },
             realtime: { params: { eventsPerSecond: 10 } }
@@ -1085,10 +1116,33 @@ const DB = {
         } catch (e) { console.error('[DB] getUsersStatus:', e.message); return {}; }
     },
 
+    // Permanently delete a user and ALL their data (RPC with SECURITY DEFINER)
     async deleteUser(userId) {
-        if (!userId) return false;
-        const client = getSb(); if (!client) return false;
-        try { await client.from('profiles').delete().eq('id', userId); return true; } catch (e) { return false; }
+        if (!userId) return { success: false, message: 'No user ID provided' };
+        const client = getSb(); if (!client) return { success: false, message: 'Supabase not initialized' };
+        try {
+            const { data, error } = await client.rpc('permanently_delete_user', { p_user_id: userId });
+            if (error) {
+                console.error('[DB] permanently_delete_user RPC error:', error.message);
+                return { success: false, message: 'Delete failed: ' + error.message };
+            }
+            // data is a JSONB object returned by the function
+            return data || { success: false, message: 'No response from server' };
+        } catch (e) {
+            console.error('[DB] deleteUser:', e.message);
+            return { success: false, message: 'Exception: ' + e.message };
+        }
+    },
+
+    // Preview what would be deleted (for confirmation dialog)
+    async previewUserDeletion(userId) {
+        if (!userId) return null;
+        const client = getSb(); if (!client) return null;
+        try {
+            const { data, error } = await client.rpc('preview_user_deletion', { p_user_id: userId });
+            if (error) { console.warn('[DB] previewUserDeletion:', error.message); return null; }
+            return data;
+        } catch (e) { console.warn('[DB] previewUserDeletion:', e.message); return null; }
     },
 
     // Realtime
@@ -1219,7 +1273,8 @@ const DB = {
                 p_title: notification.title || '',
                 p_body: notification.body || '',
                 p_related_id: notification.related_id || '',
-                p_related_type: notification.related_type || ''
+                p_related_type: notification.related_type || '',
+                p_sender_id: notification.sender_id || null
             });
             if (error) {
                 console.error('[DB] createNotification RPC ERROR:', error.message);
@@ -1227,6 +1282,43 @@ const DB = {
             }
             return data ? { id: data } : null;
         } catch (e) { console.error('[DB] createNotification:', e.message); return null; }
+    },
+
+    // Broadcast a notification to ALL users (e.g., new user joined, owner announcement)
+    async broadcastNotification(notification) {
+        if (!notification?.title) return 0;
+        const client = getSb(); if (!client) return 0;
+        try {
+            const { data, error } = await client.rpc('broadcast_notification', {
+                p_type: notification.type || 'general',
+                p_title: notification.title || '',
+                p_body: notification.body || '',
+                p_related_id: notification.related_id || '',
+                p_related_type: notification.related_type || '',
+                p_sender_id: notification.sender_id || null,
+                p_exclude_user_id: notification.exclude_user_id || null
+            });
+            if (error) { console.error('[DB] broadcastNotification:', error.message); return 0; }
+            return data || 0;
+        } catch (e) { console.error('[DB] broadcastNotification:', e.message); return 0; }
+    },
+
+    // Notify all subscribers of a creator
+    async notifyCreatorSubscribers(creatorId, notification) {
+        if (!creatorId || !notification?.title) return 0;
+        const client = getSb(); if (!client) return 0;
+        try {
+            const { data, error } = await client.rpc('notify_creator_subscribers', {
+                p_creator_id: creatorId,
+                p_type: notification.type || 'post',
+                p_title: notification.title || '',
+                p_body: notification.body || '',
+                p_related_id: notification.related_id || '',
+                p_related_type: notification.related_type || ''
+            });
+            if (error) { console.error('[DB] notifyCreatorSubscribers:', error.message); return 0; }
+            return data || 0;
+        } catch (e) { console.error('[DB] notifyCreatorSubscribers:', e.message); return 0; }
     },
 
     async getNotifs(userId, limit) {
@@ -1310,21 +1402,44 @@ const DB = {
 
 // ===================== STORAGE =====================
 const Storage = {
+    // Upload file - direct upload, no pre-checks that fail on mobile
     async uploadFile(bucket, userId, file, prefix) {
-        if (!userId || !file) { console.warn('[Storage] Missing userId or file'); return null; }
-        const client = getSb(); if (!client) { console.warn('[Storage] No client'); return null; }
+        if (!userId) throw new Error('User not authenticated');
+        if (!file) throw new Error('No file provided');
+        const client = getSb(); if (!client) throw new Error('Supabase client not initialized');
+
+        const name = file.name || 'file';
+        const ext = name.split('.').pop() || 'mp4';
+        let uniqueName;
+        try { uniqueName = crypto.randomUUID ? crypto.randomUUID() : Date.now() + '_' + Math.random().toString(36).substring(2, 10); }
+        catch (uuidErr) { uniqueName = Date.now() + '_' + Math.random().toString(36).substring(2, 10); }
+        const path = `${userId}/${Date.now()}_${prefix || 'file'}_${uniqueName}.${ext}`;
+        console.log(`[Storage] Uploading to "${bucket}": ${path} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+
+        // Simplified upload - minimal options to avoid SDK compatibility issues
+        let uploadData, uploadError;
         try {
-            const name = file.name || 'file';
-            const ext = name.split('.').pop() || 'jpg';
-            const path = `${userId}/${Date.now()}_${prefix || 'file'}.${ext}`;
-            console.log(`[Storage] Uploading to ${bucket}:`, path, 'size:', file.size);
-            const { error } = await client.storage.from(bucket).upload(path, file, { contentType: file.type || 'application/octet-stream' });
-            if (error) { console.error(`[Storage] ${bucket} upload error:`, error.message); return null; }
-            const url = client.storage.from(bucket).getPublicUrl(path).data.publicUrl;
-            console.log(`[Storage] ${bucket} uploaded:`, url);
-            return url;
-        } catch (e) { console.error(`[Storage] ${bucket} exception:`, e.message); return null; }
+            const result = await client.storage.from(bucket).upload(path, file);
+            uploadData = result.data;
+            uploadError = result.error;
+        } catch (fetchErr) {
+            if (fetchErr.message && fetchErr.message.includes('fetch')) {
+                throw new Error('Network error: Cannot reach Supabase Storage.');
+            }
+            throw fetchErr;
+        }
+
+        if (uploadError) {
+            throw new Error('Storage upload failed: ' + uploadError.message);
+        }
+        const { data: urlData } = client.storage.from(bucket).getPublicUrl(path);
+        const publicUrl = urlData?.publicUrl;
+        if (!publicUrl) throw new Error('Failed to get public URL');
+        console.log(`[Storage] Upload complete: ${publicUrl.substring(0, 60)}...`);
+        return publicUrl;
     },
+
+
 
     async uploadAvatar(userId, file) { return this.uploadFile('avatars', userId, file, 'avatar'); },
     async uploadCover(userId, file) { return this.uploadFile('covers', userId, file, 'cover'); },
@@ -1332,5 +1447,27 @@ const Storage = {
     async uploadVideo(userId, file) { return this.uploadFile('videos', userId, file, 'video'); },
     async uploadChatFile(userId, file) { return this.uploadFile('chat-files', userId, file, 'chat'); },
     async uploadBadgeScreenshot(userId, file) { return this.uploadFile('badge-screenshots', userId, file, 'badge'); },
-    async uploadGiftCardImage(userId, file) { return this.uploadFile('giftcard-images', userId, file, 'gc'); }
+    async uploadGiftCardImage(userId, file) { return this.uploadFile('giftcard-images', userId, file, 'gc'); },
+
+    // Delete a file from storage given its public URL
+    async deleteFile(publicUrl) {
+        if (!publicUrl) return false;
+        const client = getSb(); if (!client) return false;
+        try {
+            const url = new URL(publicUrl);
+            const pathParts = url.pathname.split('/object/public/');
+            if (pathParts.length < 2) { console.warn('[Storage] Cannot parse URL:', publicUrl); return false; }
+            const bucketAndPath = pathParts[1];
+            const firstSlash = bucketAndPath.indexOf('/');
+            if (firstSlash === -1) { console.warn('[Storage] Invalid path:', bucketAndPath); return false; }
+            const bucket = bucketAndPath.substring(0, firstSlash);
+            const path = bucketAndPath.substring(firstSlash + 1);
+            console.log('[Storage] Deleting from', bucket, ':', path);
+            const { error } = await client.storage.from(bucket).remove([path]);
+            if (error) { console.error('[Storage] Delete error:', error.message); return false; }
+            return true;
+        } catch (e) { console.error('[Storage] Delete exception:', e.message); return false; }
+    },
+
+    async deleteVipVideo(publicUrl) { return this.deleteFile(publicUrl); }
 };
