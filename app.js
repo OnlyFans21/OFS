@@ -1996,55 +1996,13 @@ App.compressVideo = function(file) {
     });
 };
 
-// Upload media WITH progress callback
-// Returns the uploaded URL
-// NOW properly catches and throws actual Supabase error messages
+// uploadMediaWithProgress - delegates to the working uploadMedia
+// Kept for backward compatibility, uses the exact same upload path
 App.uploadMediaWithProgress = async function(file, type, onProgress) {
-    const uid = Auth.getUid();
-    if (!uid) throw new Error('Not authenticated');
-
-    // Validate file size
-    if (!this.checkFileSize(file, type)) throw new Error('File too large');
-
-    // Validate file type for videos
-    if (type === 'video') {
-        const validTypes = ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-m4v'];
-        const ext = (file.name || '').split('.').pop().toLowerCase();
-        const validExts = ['mp4', 'mov', 'webm', 'm4v'];
-        if (!validTypes.includes(file.type) && !validExts.includes(ext)) {
-            throw new Error('Invalid video format: "' + (file.name || 'unknown') + '". Only MP4, MOV, and WEBM are allowed.');
-        }
-    }
-
-    // Compress
-    let processedFile = file;
-    const isImage = file.type?.startsWith('image/');
-    const isVideo = file.type?.startsWith('video/') || type === 'video';
-    if (isImage) {
-        if (onProgress) onProgress(5);
-        processedFile = await this.compressImage(file, type);
-    } else if (isVideo) {
-        if (onProgress) onProgress(5);
-        processedFile = await this.compressVideo(file);
-    }
-
-    // Upload with progress - Storage functions now THROW with actual error messages
-    if (onProgress) onProgress(10);
-    try {
-        let url;
-        if (isVideo) {
-            url = await Storage.uploadVideoWithProgress(uid, processedFile, onProgress);
-        } else {
-            url = await Storage.uploadPhoto(uid, processedFile);
-        }
-        if (!url) throw new Error('Storage returned empty URL after upload');
-        console.log('[UPLOAD] Success, URL:', url);
-        return url;
-    } catch (e) {
-        // Re-throw with the actual Supabase error message
-        console.error('[UPLOAD] Storage error:', e.message);
-        throw new Error(e.message || 'Upload failed');
-    }
+    if (onProgress) onProgress(0);
+    const url = await this.uploadMedia(file, type);
+    if (onProgress) onProgress(100);
+    return url;
 };
 
 // Universal media upload with progress and compression
@@ -2052,9 +2010,7 @@ App.uploadMediaWithProgress = async function(file, type, onProgress) {
 App.uploadMedia = async function(file, type) {
     const uid = Auth.getUid();
     if (!uid) throw new Error('Not authenticated');
-    // Step 1: Validate file size
     if (!this.checkFileSize(file, type)) throw new Error('File too large');
-    // Step 2: Compress
     let processedFile = file;
     const isImage = file.type.startsWith('image/');
     const isVideo = file.type.startsWith('video/');
@@ -2065,11 +2021,15 @@ App.uploadMedia = async function(file, type) {
         this.toast('Preparing file...', 'info', 1000);
         processedFile = await this.compressVideo(file);
     }
-    // Step 3: Upload to Supabase
     this.toast('Uploading...', 'info', 3000);
     let url;
-    if (isVideo) url = await Storage.uploadVideo(uid, processedFile);
-    else url = await Storage.uploadPhoto(uid, processedFile);
+    try {
+        if (isVideo) url = await Storage.uploadVideo(uid, processedFile);
+        else url = await Storage.uploadPhoto(uid, processedFile);
+    } catch (storageErr) {
+        console.error('[UPLOAD] Storage error:', storageErr.message);
+        throw storageErr;
+    }
     if (!url) throw new Error('Upload failed');
     this.toast('Upload complete!', 'success', 2000);
     return url;
@@ -2349,133 +2309,75 @@ App.handleVipUpload = function(e) {
     this.vipFile = f;
     console.log('[VIP] Selected:', f.name, 'size:', this.formatFileSize(f.size), 'type:', f.type);
 
-    // Show preview
-    const reader = new FileReader();
-    reader.onload = (ev) => {
+    // Show preview using object URL (does NOT read file, leaves File untouched for upload)
+    try {
         const c = document.getElementById('vipVideoPreview');
         if (c) {
             c.style.display = 'block';
             const v = c.querySelector('video');
-            if (v) v.src = ev.target.result;
+            if (v) {
+                // Revoke previous object URL to prevent memory leak
+                if (this._vipPreviewUrl) { URL.revokeObjectURL(this._vipPreviewUrl); }
+                this._vipPreviewUrl = URL.createObjectURL(f);
+                v.src = this._vipPreviewUrl;
+            }
         }
         this.toast('Video selected: ' + f.name + ' (' + this.formatFileSize(f.size) + ')', 'success', 2000);
-    };
-    reader.onerror = () => { this.toast('Failed to read video file', 'error'); this.vipFile = null; };
-    reader.readAsDataURL(f);
+    } catch (previewErr) {
+        console.error('[VIP] Preview error:', previewErr.message);
+        // Preview failed but file is still valid for upload
+        this.toast('Video selected (preview unavailable): ' + f.name, 'info', 2000);
+    }
 };
 // ============================================================
-// VIP VIDEO PUBLISH - Complete rewrite with progress, retry, error handling
+// VIP VIDEO PUBLISH - Uses the EXACT SAME upload path as working posts
 // ============================================================
 App.publishVip = async function() {
-    if (!this.vipFile) { this.toast('Please select a video first', 'error'); return; }
+    // Prevent double-click on mobile
+    if (this._isPublishingVip) { console.log('[VIP] Already publishing, ignoring double-click'); return; }
+    this._isPublishingVip = true;
+
+    if (!this.vipFile) { this.toast('Please select a video first', 'error'); this._isPublishingVip = false; return; }
     const title = document.getElementById('vipVideoTitle')?.value.trim();
     const price = parseFloat(document.getElementById('vipVideoPrice')?.value);
     const desc = document.getElementById('vipVideoDesc')?.value || '';
+    if (!title) { this.toast('Enter a title for your video', 'error'); this._isPublishingVip = false; return; }
+    if (!price || price < 1 || isNaN(price)) { this.toast('Enter a valid price (minimum $1)', 'error'); this._isPublishingVip = false; return; }
 
-    // Validation
-    if (!title) { this.toast('Enter a title for your video', 'error'); return; }
-    if (!price || price < 1 || isNaN(price)) { this.toast('Enter a valid price (minimum $1)', 'error'); return; }
-
-    // File type validation - only allow video formats
-    const validTypes = ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-m4v', 'video/mov'];
-    const fileExt = (this.vipFile.name || '').split('.').pop().toLowerCase();
-    const validExts = ['mp4', 'mov', 'webm', 'm4v'];
-    if (!validTypes.includes(this.vipFile.type) && !validExts.includes(fileExt)) {
-        this.toast('Invalid file type. Only MP4, MOV, and WEBM videos are allowed.', 'error', 5000);
-        console.error('[VIP] Invalid file type:', this.vipFile.type, 'ext:', fileExt);
-        return;
-    }
-
-    // Disable publish button
     const publishBtn = document.querySelector('#admin-vip .btn-gold, button[onclick*="publishVip"]');
-    if (publishBtn) { publishBtn.disabled = true; publishBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...'; }
-
-    // Show progress container
-    this._showVipUploadProgress(true);
-    this._updateVipProgress(5, 'Preparing upload...');
-
-    let videoUrl = null;
-    let dbRecord = null;
+    if (publishBtn) { publishBtn.disabled = true; publishBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Publishing...'; }
 
     try {
-        // Step 1: Upload to Supabase Storage (with retry)
-        this._updateVipProgress(10, 'Uploading video to storage...');
-        console.log('[VIP] Starting upload:', this.vipFile.name, 'size:', this.formatFileSize(this.vipFile.size), 'type:', this.vipFile.type);
+        const videoUrl = await this.uploadMedia(this.vipFile, 'video');
+        if (!videoUrl) throw new Error('Upload returned empty URL');
 
-        for (let attempt = 1; attempt <= 2; attempt++) {
-            try {
-                videoUrl = await this.uploadMediaWithProgress(this.vipFile, 'video', (pct) => {
-                    // Map 10-80% to upload progress
-                    const mapped = 10 + Math.round(pct * 0.7);
-                    this._updateVipProgress(mapped, 'Uploading... ' + pct + '%');
-                });
-                if (videoUrl) {
-                    console.log('[VIP] Upload success:', videoUrl);
-                    break;
-                }
-            } catch (upErr) {
-                console.error(`[VIP] Upload attempt ${attempt} failed:`, upErr.message);
-                if (attempt === 1) {
-                    this._updateVipProgress(15, 'Retrying upload...');
-                    await this._delay(2000);
-                } else {
-                    throw upErr;
-                }
-            }
-        }
-
-        if (!videoUrl) {
-            throw new Error('Upload failed after 2 attempts. Please check your connection and try again.');
-        }
-
-        // Step 2: Save to database
-        this._updateVipProgress(85, 'Saving video details...');
-        dbRecord = await DB.createVipVideo({
+        const dbRecord = await DB.createVipVideo({
             creator_id: Auth.getUid(),
             title,
             description: desc,
             video_url: videoUrl,
             price
         });
+        if (!dbRecord) throw new Error('Database save failed');
 
-        if (!dbRecord) {
-            // Database save failed - try to clean up storage file
-            console.error('[VIP] Database save failed, attempting storage cleanup');
-            try { await Storage.deleteVipVideo(videoUrl); } catch(c) {}
-            throw new Error('Video uploaded but failed to save details. Please try again.');
-        }
-
-        // Step 3: Success
-        this._updateVipProgress(100, 'Complete!');
-
-        // Reset form
+        // Clean up
         this.vipFile = null;
+        if (this._vipPreviewUrl) { URL.revokeObjectURL(this._vipPreviewUrl); this._vipPreviewUrl = null; }
         document.getElementById('vipVideoTitle').value = '';
         document.getElementById('vipVideoDesc').value = '';
         document.getElementById('vipVideoPrice').value = '';
         const c = document.getElementById('vipVideoPreview');
         if (c) { c.style.display = 'none'; const v = c.querySelector('video'); if (v) v.src = ''; }
 
-        this.toast('VIP video published successfully!', 'success', 4000);
-
-        // Refresh VIP videos list
+        this.toast('VIP video published!', 'success');
         this.renderAdmin();
-
-        // Notify subscribers
-        if (dbRecord?.id) {
-            try { this.notifyNewVip(Auth.getUid(), dbRecord.id); } catch (n) {}
-        }
-
-        // Hide progress after delay
-        setTimeout(() => this._showVipUploadProgress(false), 2000);
+        if (dbRecord?.id) { try { this.notifyNewVip(Auth.getUid(), dbRecord.id); } catch (n) {} }
 
     } catch (e) {
-        console.error('[VIP] Publish failed:', e);
-        this._updateVipProgress(0, 'Failed');
-        this.toast('Upload failed: ' + (e.message || 'Unknown error'), 'error', 6000);
-        setTimeout(() => this._showVipUploadProgress(false), 3000);
+        console.error('[VIP] Publish error:', e.message);
+        this.toast('Failed: ' + (e.message || 'Unknown error'), 'error');
     } finally {
-        // Re-enable publish button
+        this._isPublishingVip = false;
         if (publishBtn) {
             publishBtn.disabled = false;
             publishBtn.innerHTML = '<i class="fas fa-crown"></i> Publish VIP Video';
