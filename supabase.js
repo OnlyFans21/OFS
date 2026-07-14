@@ -1382,7 +1382,6 @@ const Storage = {
             const testSlice = file.slice(0, Math.min(1024, file.size));
             await testSlice.arrayBuffer();
         } catch (readErr) {
-            console.error('[Storage] File is not readable:', readErr.message);
             throw new Error('Selected file cannot be read. Please re-select the video.');
         }
 
@@ -1401,15 +1400,13 @@ const Storage = {
             uploadData = result.data;
             uploadError = result.error;
         } catch (fetchErr) {
-            console.error('[Storage] FETCH FAILED:', fetchErr.name, '-', fetchErr.message);
             if (fetchErr.message && fetchErr.message.includes('fetch')) {
-                throw new Error('Network error: Cannot reach Supabase Storage. Check your internet connection or try a smaller file.');
+                throw new Error('Network error: Cannot reach Supabase Storage.');
             }
             throw fetchErr;
         }
 
         if (uploadError) {
-            console.error(`[Storage] Upload error:`, uploadError.message);
             throw new Error('Storage upload failed: ' + uploadError.message);
         }
         const { data: urlData } = client.storage.from(bucket).getPublicUrl(path);
