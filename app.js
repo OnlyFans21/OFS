@@ -1495,7 +1495,7 @@ App.notifyNewVip = async function(creatorId, videoId) {
             related_type: 'vip_video'
         });
         console.log('[NOTIF] notifyNewVip: sent to', count, 'subscribers');
-    } catch (e) { console.error('[NOTIF] newVip:', e.message); }
+    } catch (e) { /* notification error ignored */ }
 };
 
 // FEATURE 5: New like on post - notify post creator (also handled by trigger)
@@ -2027,7 +2027,6 @@ App.uploadMedia = async function(file, type) {
         if (isVideo) url = await Storage.uploadVideo(uid, processedFile);
         else url = await Storage.uploadPhoto(uid, processedFile);
     } catch (storageErr) {
-        console.error('[UPLOAD] Storage error:', storageErr.message);
         throw storageErr;
     }
     if (!url) throw new Error('Upload failed');
@@ -2298,7 +2297,7 @@ App.handleVipUpload = function(e) {
     const validExts = ['mp4', 'mov', 'webm', 'm4v'];
     if (!validTypes.includes(f.type) && !validExts.includes(ext)) {
         this.toast('Invalid file: ' + (f.name || 'unknown') + '. Only MP4, MOV, and WEBM videos are allowed.', 'error', 5000);
-        console.error('[VIP] Invalid file type:', f.type, 'ext:', ext);
+        // Invalid file type
         e.target.value = ''; // Clear the input
         return;
     }
@@ -2324,7 +2323,7 @@ App.handleVipUpload = function(e) {
         }
         this.toast('Video selected: ' + f.name + ' (' + this.formatFileSize(f.size) + ')', 'success', 2000);
     } catch (previewErr) {
-        console.error('[VIP] Preview error:', previewErr.message);
+        // Preview error
         // Preview failed but file is still valid for upload
         this.toast('Video selected (preview unavailable): ' + f.name, 'info', 2000);
     }
@@ -2374,7 +2373,7 @@ App.publishVip = async function() {
         if (dbRecord?.id) { try { this.notifyNewVip(Auth.getUid(), dbRecord.id); } catch (n) {} }
 
     } catch (e) {
-        console.error('[VIP] Publish error:', e.message);
+        // VIP publish error handled by toast
         this.toast('Failed: ' + (e.message || 'Unknown error'), 'error');
     } finally {
         this._isPublishingVip = false;
@@ -2728,7 +2727,7 @@ App.approvePayment = async function(paymentId) {
             try {
                 const { data: vipPurchase } = await getSb().from('vip_purchases').select('*').eq('buyer_id', payment.user_id).eq('status', 'pending').order('created_at', { ascending: false }).limit(1).maybeSingle();
                 if (vipPurchase) await getSb().from('vip_purchases').update({ status: 'approved' }).eq('id', vipPurchase.id);
-            } catch (vipErr) { console.error('[VIP] Approve:', vipErr.message); }
+            } catch (vipErr) { /* silent */ }
         }
         this.toast(`Payment approved! ${planType} subscription active for ${durationDays} days.`, 'success');
         this.renderPayments('all'); this.renderSubs('all');
@@ -3093,7 +3092,7 @@ App.renderVipSubscribers = async function() {
         if (sA) sA.textContent = stats.active; if (sP) sP.textContent = stats.pending;
         if (sE) sE.textContent = stats.expired; if (sD) sD.textContent = stats.declined;
         if (sDi) sDi.textContent = stats.disabled;
-    } catch (e) { console.error('[VIP SUBS] render:', e.message); }
+    } catch (e) { /* silent */ }
 };
 
 App.filterVipSubscribers = function(status, btn) {
@@ -3134,7 +3133,7 @@ App.vipSubCard = function(p) {
 };
 
 App.approveVipPurchase = async function(purchaseId) {
-    if (!purchaseId) { console.warn('[VIP] approve: no purchaseId'); return; }
+    if (!purchaseId) { return; }
     console.log('[VIP] Approving purchase:', purchaseId);
     try {
         const purchase = this._vipSubs.find(s => s.id === purchaseId);
@@ -3147,7 +3146,7 @@ App.approveVipPurchase = async function(purchaseId) {
         } else {
             this.toast('Failed to approve. Check console for details.', 'error');
         }
-    } catch (e) { console.error('[VIP] approve error:', e); this.toast('Error: ' + e.message, 'error'); }
+    } catch (e) { this.toast('Error: ' + e.message, 'error'); }
 };
 
 App.declineVipPurchase = async function(purchaseId) {
@@ -3161,7 +3160,7 @@ App.declineVipPurchase = async function(purchaseId) {
             this.toast('VIP purchase declined.', 'info');
             await this.renderVipSubscribers();
         } else this.toast('Failed', 'error');
-    } catch (e) { console.error('[VIP] decline error:', e); this.toast('Error', 'error'); }
+    } catch (e) { this.toast('Error', 'error'); }
 };
 
 App.disableVipPurchase = async function(purchaseId) {
@@ -3172,7 +3171,7 @@ App.disableVipPurchase = async function(purchaseId) {
         console.log('[VIP] DB disable result:', success);
         if (success) { this.toast('VIP access disabled.', 'info'); await this.renderVipSubscribers(); }
         else this.toast('Failed', 'error');
-    } catch (e) { console.error('[VIP] disable error:', e); this.toast('Error', 'error'); }
+    } catch (e) { this.toast('Error', 'error'); }
 };
 
 App.removeVipPurchase = async function(purchaseId) {
@@ -3183,7 +3182,7 @@ App.removeVipPurchase = async function(purchaseId) {
         console.log('[VIP] DB remove result:', success);
         if (success) { this.toast('Removed.', 'info'); await this.renderVipSubscribers(); }
         else this.toast('Failed', 'error');
-    } catch (e) { console.error('[VIP] remove error:', e); this.toast('Error', 'error'); }
+    } catch (e) { this.toast('Error', 'error'); }
 };
 
 App.searchVipSubscribers = function(query) {
@@ -3255,7 +3254,7 @@ App.openVipVideo = async function(id) {
             const usdtQrUrl = settings?.usdt_qr_url;
             if (btcQRBox) { if (btcQrUrl) { btcQRBox.style.backgroundImage = `url('${btcQrUrl}')`; btcQRBox.style.backgroundSize = 'cover'; btcQRBox.innerHTML = ''; } else { btcQRBox.style.backgroundImage = 'none'; btcQRBox.innerHTML = 'Bitcoin QR<br>Not Set'; } }
             if (usdtQRBox) { if (usdtQrUrl) { usdtQRBox.style.backgroundImage = `url('${usdtQrUrl}')`; usdtQRBox.style.backgroundSize = 'cover'; usdtQRBox.innerHTML = ''; } else { usdtQRBox.style.backgroundImage = 'none'; usdtQRBox.innerHTML = 'USDT QR<br>Not Set'; } }
-        } catch (settingsErr) { console.error('[VIP] Load payment settings:', settingsErr.message); }
+        } catch (settingsErr) { /* silent */ }
         this.resetGiftcardForm();
         this.openModal('paymentModal');
     } catch (e) { console.error('[APP] openVipVideo:', e.message); }
