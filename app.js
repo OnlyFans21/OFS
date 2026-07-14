@@ -1899,82 +1899,140 @@ App.compressImage = function(file, type) {
 
 // Video compression: extract frames and create a compressed preview video
 // On mobile browsers, this falls back to uploading original with size check
+// ============================================================
+// SAFE VIDEO COMPRESSION - Never hangs, works on all devices
+// ============================================================
 App.compressVideo = function(file) {
-    return new Promise((resolve, reject) => {
-        // If file is already under 20MB, skip compression (browser video compression is limited)
-        if (file.size < 20 * 1024 * 1024) {
-            console.log('[VIDEO] File under 20MB, skipping compression');
+    return new Promise((resolve) => {
+        // SAFETY: Always resolve within 3 seconds no matter what
+        const safetyTimer = setTimeout(() => {
+            console.log('[VIDEO] Compression safety timeout - using original file');
+            resolve(file);
+        }, 3000);
+
+        // If file is under 50MB, skip compression entirely
+        // Modern networks and Supabase can handle this fine
+        if (file.size < 50 * 1024 * 1024) {
+            clearTimeout(safetyTimer);
+            console.log('[VIDEO] File under 50MB, skipping compression');
             resolve(file);
             return;
         }
-        this.toast(`Compressing video: ${this.formatFileSize(file.size)}...`, 'info', 3000);
-        // Attempt to use MediaRecorder for re-encoding at lower bitrate
-        const video = document.createElement('video');
-        video.muted = true;
-        video.playsInline = true;
-        const url = URL.createObjectURL(file);
-        video.src = url;
-        video.onloadedmetadata = () => {
-            video.play().then(() => {
-                // Determine output resolution (max 720p)
-                let outW = video.videoWidth, outH = video.videoHeight;
-                if (outW > 1280) { outH = Math.round(outH * (1280 / outW)); outW = 1280; }
-                if (outH > 720) { outW = Math.round(outW * (720 / outH)); outH = 720; }
-                // Make dimensions even (required for some codecs)
-                outW = Math.floor(outW / 2) * 2; outH = Math.floor(outH / 2) * 2;
-                const canvas = document.createElement('canvas');
-                canvas.width = outW; canvas.height = outH;
-                const ctx = canvas.getContext('2d');
-                const stream = canvas.captureStream();
-                // Try to capture audio
-                let audioStream = null;
-                try {
-                    const audCtx = new (window.AudioContext || window.webkitAudioContext)();
-                    const src = audCtx.createMediaElementSource(video);
-                    const dest = audCtx.createMediaStreamDestination();
-                    src.connect(dest);
-                    src.connect(audCtx.destination);
-                    audioStream = dest.stream;
-                } catch (ae) { /* No audio */ }
-                if (audioStream) {
-                    audioStream.getAudioTracks().forEach(t => stream.addTrack(t));
+
+        // For large files (>50MB), try lightweight compression
+        // but ALWAYS fall back to original if anything goes wrong
+        this.toast(`Large video (${this.formatFileSize(file.size)}). Attempting compression...`, 'info', 3000);
+
+        try {
+            const video = document.createElement('video');
+            video.muted = true;
+            video.playsInline = true;
+            video.preload = 'metadata';
+            const objUrl = URL.createObjectURL(file);
+
+            const cleanup = () => {
+                clearTimeout(safetyTimer);
+                try { URL.revokeObjectURL(objUrl); } catch(e) {}
+            };
+
+            // If metadata doesn't load in 2 seconds, use original
+            const metaTimer = setTimeout(() => {
+                console.log('[VIDEO] Metadata load timeout - using original');
+                cleanup();
+                resolve(file);
+            }, 2000);
+
+            video.onloadedmetadata = () => {
+                clearTimeout(metaTimer);
+                // Check video duration - if very long, compression would take too long
+                if (video.duration > 300) { // > 5 minutes
+                    console.log('[VIDEO] Video too long (' + Math.round(video.duration) + 's) - using original');
+                    cleanup();
+                    resolve(file);
+                    return;
                 }
-                const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' :
-                                 MediaRecorder.isTypeSupported('video/webm;codecs=vp8') ? 'video/webm;codecs=vp8' :
-                                 'video/webm';
-                const mediaRecorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 1500000 });
-                const chunks = [];
-                mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-                mediaRecorder.onstop = () => {
-                    URL.revokeObjectURL(url);
-                    const blob = new Blob(chunks, { type: 'video/webm' });
-                    const compressed = new File([blob], (file.name || 'video').replace(/\.[^.]+$/, '') + '.webm', { type: 'video/webm' });
-                    const saved = ((file.size - compressed.size) / file.size * 100).toFixed(0);
-                    if (saved > 5) this.toast(`Compressed: ${this.formatFileSize(file.size)} → ${this.formatFileSize(compressed.size)} (${saved}% smaller)`, 'success', 2000);
-                    resolve(compressed);
-                };
-                mediaRecorder.onerror = () => {
-                    URL.revokeObjectURL(url);
-                    resolve(file); // Fallback to original
-                };
-                const drawFrame = () => {
-                    if (video.paused || video.ended) return;
-                    ctx.drawImage(video, 0, 0, outW, outH);
-                    requestAnimationFrame(drawFrame);
-                };
-                mediaRecorder.start(100);
-                drawFrame();
-                video.onended = () => mediaRecorder.stop();
-            }).catch(() => {
-                URL.revokeObjectURL(url);
-                resolve(file); // Fallback
-            });
-        };
-        video.onerror = () => {
-            URL.revokeObjectURL(url);
-            resolve(file); // Fallback to original on error
-        };
+                video.play().then(() => {
+                    let outW = video.videoWidth, outH = video.videoHeight;
+                    if (outW > 1280) { outH = Math.round(outH * (1280 / outW)); outW = 1280; }
+                    if (outH > 720) { outW = Math.round(outW * (720 / outH)); outH = 720; }
+                    outW = Math.floor(outW / 2) * 2; outH = Math.floor(outH / 2) * 2;
+                    const canvas = document.createElement('canvas');
+                    canvas.width = outW; canvas.height = outH;
+                    const ctx = canvas.getContext('2d');
+                    const stream = canvas.captureStream();
+                    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' :
+                                     MediaRecorder.isTypeSupported('video/webm;codecs=vp8') ? 'video/webm;codecs=vp8' :
+                                     MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : '';
+                    if (!mimeType) {
+                        console.log('[VIDEO] MediaRecorder not supported - using original');
+                        cleanup(); resolve(file); return;
+                    }
+                    const mediaRecorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 1500000 });
+                    const chunks = [];
+                    mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+                    mediaRecorder.onstop = () => {
+                        cleanup();
+                        const blob = new Blob(chunks, { type: 'video/webm' });
+                        if (blob.size < 1024) { resolve(file); return; } // Compressed too small = failure
+                        const compressed = new File([blob], (file.name || 'video').replace(/\.[^.]+$/, '') + '.webm', { type: 'video/webm' });
+                        const saved = ((file.size - compressed.size) / file.size * 100).toFixed(0);
+                        if (saved > 5) this.toast(`Compressed: ${this.formatFileSize(file.size)} → ${this.formatFileSize(compressed.size)} (${saved}% smaller)`, 'success', 2000);
+                        resolve(compressed);
+                    };
+                    mediaRecorder.onerror = () => { cleanup(); resolve(file); };
+                    const drawFrame = () => { if (video.paused || video.ended) return; ctx.drawImage(video, 0, 0, outW, outH); requestAnimationFrame(drawFrame); };
+                    mediaRecorder.start(100);
+                    drawFrame();
+                    video.onended = () => mediaRecorder.stop();
+                }).catch(() => { cleanup(); resolve(file); });
+            };
+            video.onerror = () => { clearTimeout(metaTimer); cleanup(); resolve(file); };
+            video.src = objUrl;
+        } catch (e) {
+            clearTimeout(safetyTimer);
+            console.log('[VIDEO] Compression error:', e.message, '- using original');
+            resolve(file);
+        }
     });
+};
+
+// Upload media WITH progress callback
+// Returns the uploaded URL
+App.uploadMediaWithProgress = async function(file, type, onProgress) {
+    const uid = Auth.getUid();
+    if (!uid) throw new Error('Not authenticated');
+    // Validate file size
+    if (!this.checkFileSize(file, type)) throw new Error('File too large');
+    // Validate file type for videos
+    if (type === 'video') {
+        const validTypes = ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-m4v'];
+        const ext = (file.name || '').split('.').pop().toLowerCase();
+        const validExts = ['mp4', 'mov', 'webm', 'm4v'];
+        if (!validTypes.includes(file.type) && !validExts.includes(ext)) {
+            throw new Error('Invalid video format. Only MP4, MOV, and WEBM are supported.');
+        }
+    }
+    // Compress
+    let processedFile = file;
+    const isImage = file.type?.startsWith('image/');
+    const isVideo = file.type?.startsWith('video/') || type === 'video';
+    if (isImage) {
+        if (onProgress) onProgress(5);
+        processedFile = await this.compressImage(file, type);
+    } else if (isVideo) {
+        if (onProgress) onProgress(5);
+        processedFile = await this.compressVideo(file);
+    }
+    // Upload with progress
+    if (onProgress) onProgress(10);
+    let url;
+    if (isVideo) {
+        url = await Storage.uploadVideoWithProgress(uid, processedFile, onProgress);
+    } else {
+        url = await Storage.uploadPhoto(uid, processedFile);
+    }
+    if (!url) throw new Error('Upload failed - no URL returned from storage');
+    return url;
 };
 
 // Universal media upload with progress and compression
@@ -2258,26 +2316,197 @@ App.publishPost = async function() {
     } catch (e) { console.error('[PUBLISH] Error:', e); this.toast('Publish failed', 'error'); }
 };
 
-App.handleVipUpload = function(e) { const f = e.target.files?.[0]; if (!f) return; if (!this.checkFileSize(f, 'video')) return; this.vipFile = f; const reader = new FileReader(); reader.onload = (ev) => { const c = document.getElementById('vipVideoPreview'); if (c) { c.style.display = 'block'; const v = c.querySelector('video'); if (v) v.src = ev.target.result; } }; reader.readAsDataURL(f); };
+App.handleVipUpload = function(e) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+
+    // File type validation
+    const validTypes = ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-m4v'];
+    const ext = (f.name || '').split('.').pop().toLowerCase();
+    const validExts = ['mp4', 'mov', 'webm', 'm4v'];
+    if (!validTypes.includes(f.type) && !validExts.includes(ext)) {
+        this.toast('Invalid file: ' + (f.name || 'unknown') + '. Only MP4, MOV, and WEBM videos are allowed.', 'error', 5000);
+        console.error('[VIP] Invalid file type:', f.type, 'ext:', ext);
+        e.target.value = ''; // Clear the input
+        return;
+    }
+
+    // File size validation
+    if (!this.checkFileSize(f, 'video')) { e.target.value = ''; return; }
+
+    this.vipFile = f;
+    console.log('[VIP] Selected:', f.name, 'size:', this.formatFileSize(f.size), 'type:', f.type);
+
+    // Show preview
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        const c = document.getElementById('vipVideoPreview');
+        if (c) {
+            c.style.display = 'block';
+            const v = c.querySelector('video');
+            if (v) v.src = ev.target.result;
+        }
+        this.toast('Video selected: ' + f.name + ' (' + this.formatFileSize(f.size) + ')', 'success', 2000);
+    };
+    reader.onerror = () => { this.toast('Failed to read video file', 'error'); this.vipFile = null; };
+    reader.readAsDataURL(f);
+};
+// ============================================================
+// VIP VIDEO PUBLISH - Complete rewrite with progress, retry, error handling
+// ============================================================
 App.publishVip = async function() {
-    if (!this.vipFile) { this.toast('Select a video', 'error'); return; }
+    if (!this.vipFile) { this.toast('Please select a video first', 'error'); return; }
     const title = document.getElementById('vipVideoTitle')?.value.trim();
     const price = parseFloat(document.getElementById('vipVideoPrice')?.value);
-    if (!title) { this.toast('Enter title', 'error'); return; }
-    if (!price || price < 1 || isNaN(price)) { this.toast('Enter valid price', 'error'); return; }
+    const desc = document.getElementById('vipVideoDesc')?.value || '';
+
+    // Validation
+    if (!title) { this.toast('Enter a title for your video', 'error'); return; }
+    if (!price || price < 1 || isNaN(price)) { this.toast('Enter a valid price (minimum $1)', 'error'); return; }
+
+    // File type validation - only allow video formats
+    const validTypes = ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-m4v', 'video/mov'];
+    const fileExt = (this.vipFile.name || '').split('.').pop().toLowerCase();
+    const validExts = ['mp4', 'mov', 'webm', 'm4v'];
+    if (!validTypes.includes(this.vipFile.type) && !validExts.includes(fileExt)) {
+        this.toast('Invalid file type. Only MP4, MOV, and WEBM videos are allowed.', 'error', 5000);
+        console.error('[VIP] Invalid file type:', this.vipFile.type, 'ext:', fileExt);
+        return;
+    }
+
+    // Disable publish button
+    const publishBtn = document.querySelector('#admin-vip .btn-gold, button[onclick*="publishVip"]');
+    if (publishBtn) { publishBtn.disabled = true; publishBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...'; }
+
+    // Show progress container
+    this._showVipUploadProgress(true);
+    this._updateVipProgress(5, 'Preparing upload...');
+
+    let videoUrl = null;
+    let dbRecord = null;
+
     try {
-        let url = null;
-        try { url = await this.uploadMedia(this.vipFile, 'video'); }
-        catch (upErr) { this.toast(upErr.message, 'error'); return; }
-        if (!url) { this.toast('Upload failed', 'error'); return; }
-        const result = await DB.createVipVideo({ creator_id: Auth.getUid(), title, description: document.getElementById('vipVideoDesc')?.value || '', video_url: url, price });
-        this.vipFile = null; document.getElementById('vipVideoTitle').value = ''; document.getElementById('vipVideoDesc').value = ''; document.getElementById('vipVideoPrice').value = '';
-        const c = document.getElementById('vipVideoPreview'); if (c) c.style.display = 'none';
-        this.toast('VIP video published!', 'success'); this.renderAdmin();
-        // Notify subscribers about new VIP content
-        if (result?.id) { try { this.notifyNewVip(Auth.getUid(), result.id); } catch (n) {} }
-    } catch (e) { this.toast('Failed', 'error'); }
+        // Step 1: Upload to Supabase Storage (with retry)
+        this._updateVipProgress(10, 'Uploading video to storage...');
+        console.log('[VIP] Starting upload:', this.vipFile.name, 'size:', this.formatFileSize(this.vipFile.size), 'type:', this.vipFile.type);
+
+        for (let attempt = 1; attempt <= 2; attempt++) {
+            try {
+                videoUrl = await this.uploadMediaWithProgress(this.vipFile, 'video', (pct) => {
+                    // Map 10-80% to upload progress
+                    const mapped = 10 + Math.round(pct * 0.7);
+                    this._updateVipProgress(mapped, 'Uploading... ' + pct + '%');
+                });
+                if (videoUrl) {
+                    console.log('[VIP] Upload success:', videoUrl);
+                    break;
+                }
+            } catch (upErr) {
+                console.error(`[VIP] Upload attempt ${attempt} failed:`, upErr.message);
+                if (attempt === 1) {
+                    this._updateVipProgress(15, 'Retrying upload...');
+                    await this._delay(2000);
+                } else {
+                    throw upErr;
+                }
+            }
+        }
+
+        if (!videoUrl) {
+            throw new Error('Upload failed after 2 attempts. Please check your connection and try again.');
+        }
+
+        // Step 2: Save to database
+        this._updateVipProgress(85, 'Saving video details...');
+        dbRecord = await DB.createVipVideo({
+            creator_id: Auth.getUid(),
+            title,
+            description: desc,
+            video_url: videoUrl,
+            price
+        });
+
+        if (!dbRecord) {
+            // Database save failed - try to clean up storage file
+            console.error('[VIP] Database save failed, attempting storage cleanup');
+            try { await Storage.deleteVipVideo(videoUrl); } catch(c) {}
+            throw new Error('Video uploaded but failed to save details. Please try again.');
+        }
+
+        // Step 3: Success
+        this._updateVipProgress(100, 'Complete!');
+
+        // Reset form
+        this.vipFile = null;
+        document.getElementById('vipVideoTitle').value = '';
+        document.getElementById('vipVideoDesc').value = '';
+        document.getElementById('vipVideoPrice').value = '';
+        const c = document.getElementById('vipVideoPreview');
+        if (c) { c.style.display = 'none'; const v = c.querySelector('video'); if (v) v.src = ''; }
+
+        this.toast('VIP video published successfully!', 'success', 4000);
+
+        // Refresh VIP videos list
+        this.renderAdmin();
+
+        // Notify subscribers
+        if (dbRecord?.id) {
+            try { this.notifyNewVip(Auth.getUid(), dbRecord.id); } catch (n) {}
+        }
+
+        // Hide progress after delay
+        setTimeout(() => this._showVipUploadProgress(false), 2000);
+
+    } catch (e) {
+        console.error('[VIP] Publish failed:', e);
+        this._updateVipProgress(0, 'Failed');
+        this.toast('Upload failed: ' + (e.message || 'Unknown error'), 'error', 6000);
+        setTimeout(() => this._showVipUploadProgress(false), 3000);
+    } finally {
+        // Re-enable publish button
+        if (publishBtn) {
+            publishBtn.disabled = false;
+            publishBtn.innerHTML = '<i class="fas fa-crown"></i> Publish VIP Video';
+        }
+    }
 };
+
+// Progress bar UI helpers
+App._showVipUploadProgress = function(show) {
+    let container = document.getElementById('vipUploadProgressContainer');
+    if (!container) {
+        // Create the progress container if it doesn't exist
+        const formContainer = document.getElementById('vipVideoPreview')?.parentElement;
+        if (!formContainer) return;
+        container = document.createElement('div');
+        container.id = 'vipUploadProgressContainer';
+        container.style.cssText = 'display:none;margin:12px 0;padding:12px;background:var(--bg-card);border-radius:12px;border:1px solid var(--border);';
+        container.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                <span id="vipProgressLabel" style="font-size:13px;color:var(--text-secondary)">Uploading...</span>
+                <span id="vipProgressPercent" style="font-size:13px;font-weight:700;color:var(--primary)">0%</span>
+            </div>
+            <div style="width:100%;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+                <div id="vipProgressBar" style="width:0%;height:100%;background:linear-gradient(90deg,var(--primary),var(--accent));border-radius:3px;transition:width 0.3s ease"></div>
+            </div>`;
+        const previewEl = document.getElementById('vipVideoPreview');
+        if (previewEl && previewEl.nextElementSibling) {
+            previewEl.parentElement.insertBefore(container, previewEl.nextElementSibling);
+        }
+    }
+    if (container) container.style.display = show ? 'block' : 'none';
+};
+
+App._updateVipProgress = function(percent, label) {
+    const bar = document.getElementById('vipProgressBar');
+    const pct = document.getElementById('vipProgressPercent');
+    const lbl = document.getElementById('vipProgressLabel');
+    if (bar) bar.style.width = Math.min(100, Math.max(0, percent)) + '%';
+    if (pct) pct.textContent = Math.min(100, Math.max(0, percent)) + '%';
+    if (lbl) lbl.textContent = label || 'Uploading...';
+};
+
+App._delay = function(ms) { return new Promise(r => setTimeout(r, ms)); };
 App.delVip = async function(id) {
     console.log('[DELETE] delVip called with id:', id);
     if (!id) return;
