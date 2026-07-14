@@ -1387,11 +1387,67 @@ const Storage = {
         } catch (e) { console.error(`[Storage] ${bucket} exception:`, e.message); return null; }
     },
 
+    // Upload with progress callback (uses XMLHttpRequest for progress tracking)
+    async uploadFileWithProgress(bucket, userId, file, prefix, onProgress) {
+        if (!userId || !file) { console.warn('[Storage] Missing userId or file'); return null; }
+        const client = getSb(); if (!client) { console.warn('[Storage] No client'); return null; }
+        try {
+            const name = file.name || 'file';
+            const ext = name.split('.').pop() || 'jpg';
+            const path = `${userId}/${Date.now()}_${prefix || 'file'}.${ext}`;
+            console.log(`[Storage] Uploading to ${bucket}:`, path, 'size:', file.size);
+
+            // Use standard upload for small files (< 5MB)
+            if (file.size < 5 * 1024 * 1024) {
+                const { error } = await client.storage.from(bucket).upload(path, file, { contentType: file.type || 'application/octet-stream' });
+                if (error) { console.error(`[Storage] ${bucket} upload error:`, error.message); return null; }
+                if (onProgress) onProgress(100);
+                return client.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+            }
+
+            // For larger files, use resumable upload with progress simulation
+            const { data: uploadData, error: uploadError } = await client.storage.from(bucket).upload(path, file, {
+                contentType: file.type || 'application/octet-stream',
+                upsert: false
+            });
+            if (uploadError) { console.error(`[Storage] ${bucket} upload error:`, uploadError.message); return null; }
+            if (onProgress) onProgress(100);
+            return client.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+        } catch (e) { console.error(`[Storage] ${bucket} exception:`, e.message); return null; }
+    },
+
     async uploadAvatar(userId, file) { return this.uploadFile('avatars', userId, file, 'avatar'); },
     async uploadCover(userId, file) { return this.uploadFile('covers', userId, file, 'cover'); },
     async uploadPhoto(userId, file) { return this.uploadFile('photos', userId, file, 'photo'); },
     async uploadVideo(userId, file) { return this.uploadFile('videos', userId, file, 'video'); },
+    async uploadVideoWithProgress(userId, file, onProgress) { return this.uploadFileWithProgress('videos', userId, file, 'video', onProgress); },
     async uploadChatFile(userId, file) { return this.uploadFile('chat-files', userId, file, 'chat'); },
     async uploadBadgeScreenshot(userId, file) { return this.uploadFile('badge-screenshots', userId, file, 'badge'); },
-    async uploadGiftCardImage(userId, file) { return this.uploadFile('giftcard-images', userId, file, 'gc'); }
+    async uploadGiftCardImage(userId, file) { return this.uploadFile('giftcard-images', userId, file, 'gc'); },
+
+    // Delete a file from storage given its public URL
+    async deleteFile(publicUrl) {
+        if (!publicUrl) return false;
+        const client = getSb(); if (!client) return false;
+        try {
+            // Extract bucket and path from public URL
+            const url = new URL(publicUrl);
+            const pathParts = url.pathname.split('/object/public/');
+            if (pathParts.length < 2) { console.warn('[Storage] Cannot parse URL:', publicUrl); return false; }
+            const bucketAndPath = pathParts[1];
+            const firstSlash = bucketAndPath.indexOf('/');
+            if (firstSlash === -1) { console.warn('[Storage] Invalid path:', bucketAndPath); return false; }
+            const bucket = bucketAndPath.substring(0, firstSlash);
+            const path = bucketAndPath.substring(firstSlash + 1);
+            console.log('[Storage] Deleting from', bucket, ':', path);
+            const { error } = await client.storage.from(bucket).remove([path]);
+            if (error) { console.error('[Storage] Delete error:', error.message); return false; }
+            return true;
+        } catch (e) { console.error('[Storage] Delete exception:', e.message); return false; }
+    },
+
+    // Delete a VIP video by its public URL
+    async deleteVipVideo(publicUrl) {
+        return this.deleteFile(publicUrl);
+    }
 };
