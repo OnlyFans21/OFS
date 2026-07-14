@@ -789,59 +789,55 @@ const DB = {
         try { const { data } = await client.from('verified_badge_subs').select('*, creator:profiles!verified_badge_subs_creator_id_fkey(*)').eq('status', 'pending').order('created_at', { ascending: false }); return data || []; } catch (e) { return []; }
     },
 
+    // All badge admin operations use RPC with SECURITY DEFINER to bypass RLS
     async approveBadge(id, creatorId) {
-        if (!id || !creatorId) return;
-        const client = getSb(); if (!client) return;
+        if (!id || !creatorId) return false;
+        const client = getSb(); if (!client) return false;
         try {
-            const now = new Date().toISOString();
-            const expires = new Date(Date.now() + 30 * 864e5).toISOString();
-            await client.from('verified_badge_subs').update({ status: 'active', activated_at: now, expires_at: expires, updated_at: now }).eq('id', id);
-            await client.from('profiles').update({ verified: true }).eq('id', creatorId);
-        } catch (e) {}
+            const { error } = await client.rpc('approve_verified_badge', { p_badge_id: id, p_creator_id: creatorId });
+            if (error) { console.error('[DB] approveBadge RPC:', error.message); return false; }
+            return true;
+        } catch (e) { console.error('[DB] approveBadge:', e.message); return false; }
     },
 
     async rejectBadge(id, reason) {
         if (!id) return false;
         const client = getSb(); if (!client) return false;
         try {
-            const { data: req } = await client.from('verified_badge_subs').select('creator_id').eq('id', id).maybeSingle();
-            await client.from('verified_badge_subs').update({ status: 'rejected', rejected_reason: reason || '', updated_at: new Date().toISOString() }).eq('id', id);
-            if (req?.creator_id) await client.from('profiles').update({ verified: false }).eq('id', req.creator_id);
+            const { error } = await client.rpc('reject_verified_badge', { p_badge_id: id, p_reason: reason || '' });
+            if (error) { console.error('[DB] rejectBadge RPC:', error.message); return false; }
             return true;
-        } catch (e) { return false; }
+        } catch (e) { console.error('[DB] rejectBadge:', e.message); return false; }
     },
 
     async suspendBadge(id, creatorId) {
         if (!id || !creatorId) return false;
         const client = getSb(); if (!client) return false;
         try {
-            await client.from('verified_badge_subs').update({ status: 'suspended', updated_at: new Date().toISOString() }).eq('id', id);
-            await client.from('profiles').update({ verified: false }).eq('id', creatorId);
+            const { error } = await client.rpc('suspend_verified_badge', { p_badge_id: id, p_creator_id: creatorId });
+            if (error) { console.error('[DB] suspendBadge RPC:', error.message); return false; }
             return true;
-        } catch (e) { return false; }
+        } catch (e) { console.error('[DB] suspendBadge:', e.message); return false; }
     },
 
     async reactivateBadge(id, creatorId) {
         if (!id || !creatorId) return false;
         const client = getSb(); if (!client) return false;
         try {
-            const now = new Date().toISOString();
-            const expires = new Date(Date.now() + 30 * 864e5).toISOString();
-            await client.from('verified_badge_subs').update({ status: 'active', activated_at: now, expires_at: expires, updated_at: now }).eq('id', id);
-            await client.from('profiles').update({ verified: true }).eq('id', creatorId);
+            const { error } = await client.rpc('reactivate_verified_badge', { p_badge_id: id, p_creator_id: creatorId });
+            if (error) { console.error('[DB] reactivateBadge RPC:', error.message); return false; }
             return true;
-        } catch (e) { return false; }
+        } catch (e) { console.error('[DB] reactivateBadge:', e.message); return false; }
     },
 
     async deleteBadgeRequest(id) {
         if (!id) return false;
         const client = getSb(); if (!client) return false;
         try {
-            const { data: req } = await client.from('verified_badge_subs').select('creator_id').eq('id', id).maybeSingle();
-            if (req?.creator_id) await client.from('profiles').update({ verified: false }).eq('id', req.creator_id);
-            await client.from('verified_badge_subs').delete().eq('id', id);
+            const { error } = await client.rpc('delete_verified_badge_request', { p_badge_id: id });
+            if (error) { console.error('[DB] deleteBadgeRequest RPC:', error.message); return false; }
             return true;
-        } catch (e) { return false; }
+        } catch (e) { console.error('[DB] deleteBadgeRequest:', e.message); return false; }
     },
 
     async getAllBadgeRequests(status) {
